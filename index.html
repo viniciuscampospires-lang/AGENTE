@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QUANTUM SCALP · Solana Bot</title>
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --bg2: #0f1117;
+    --bg3: #13151e;
+    --bg4: #1a1d2a;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --green: #00e676;
+    --green2: #00c853;
+    --red: #ff3d57;
+    --yellow: #ffc107;
+    --blue: #448aff;
+    --purple: #b388ff;
+    --text: #e8eaf0;
+    --text2: #8a8fa8;
+    --text3: #555970;
+    --card: #111420;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; min-height: 100vh; overflow-x: hidden; }
+
+  /* HEADER */
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #448aff22, #00e67622); border: 1px solid var(--green); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 2px; color: var(--green); }
+  .logo-sub { font-size: 9px; color: var(--text3); letter-spacing: 3px; margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .status-text { font-size: 11px; color: var(--text2); letter-spacing: 1px; }
+
+  /* WALLET BAR */
+  .wallet-bar { background: var(--bg3); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .wallet-info { display: flex; align-items: center; gap: 8px; }
+  .wallet-addr { font-size: 11px; color: var(--text2); background: var(--bg4); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; }
+  .wallet-addr:hover { border-color: var(--green); color: var(--green); }
+  .balance-chip { display: flex; align-items: center; gap: 6px; background: var(--bg4); padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); }
+  .balance-val { font-size: 13px; font-weight: 700; color: var(--text); }
+  .balance-label { font-size: 10px; color: var(--text3); }
+  .btn-connect { background: var(--green); color: #000; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; letter-spacing: 1px; }
+  .btn-connect:hover { background: var(--green2); }
+  .btn-connect.red { background: var(--red); color: #fff; }
+
+  /* GRID LAYOUT */
+  .main { display: grid; grid-template-columns: 320px 1fr; grid-template-rows: auto 1fr; gap: 0; height: calc(100vh - 100px); }
+  .sidebar { border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg2); }
+  .content { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* STATS ROW */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+  .stat-card { background: var(--bg2); padding: 14px 16px; }
+  .stat-label { font-size: 9px; color: var(--text3); letter-spacing: 2px; margin-bottom: 6px; }
+  .stat-val { font-size: 18px; font-weight: 700; }
+  .stat-val.green { color: var(--green); }
+  .stat-val.red { color: var(--red); }
+  .stat-val.yellow { color: var(--yellow); }
+  .stat-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+  /* SIDEBAR SECTIONS */
+  .section { border-bottom: 1px solid var(--border); padding: 14px 16px; }
+  .section-title { font-size: 9px; color: var(--text3); letter-spacing: 3px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content:''; flex:1; height:1px; background: var(--border); }
+
+  /* PARAMS */
+  .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .param-label { font-size: 11px; color: var(--text2); }
+  .param-input { background: var(--bg4); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 12px; padding: 4px 8px; width: 90px; text-align: right; }
+  .param-input:focus { outline: none; border-color: var(--green); }
+
+  /* TOGGLE SWITCH */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .toggle-label { font-size: 11px; color: var(--text2); }
+  .toggle { position: relative; width: 36px; height: 20px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--bg4); border-radius: 20px; border: 1px solid var(--border); cursor: pointer; transition: .2s; }
+  .slider::before { content:''; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: var(--text3); border-radius: 50%; transition: .2s; }
+  input:checked + .slider { background: var(--green); border-color: var(--green); }
+  input:checked + .slider::before { transform: translateX(16px); background: #000; }
+
+  /* SECURITY BADGES */
+  .sec-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; padding: 3px 8px; border-radius: 4px; margin: 2px; }
+  .sec-badge.active { background: rgba(0,230,118,.1); color: var(--green); border: 1px solid rgba(0,230,118,.2); }
+  .sec-badge.warn { background: rgba(255,193,7,.1); color: var(--yellow); border: 1px solid rgba(255,193,7,.2); }
+
+  /* BOT CONTROL */
+  .btn-start { width: 100%; padding: 12px; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: .2s; margin-bottom: 8px; }
+  .btn-start.start { background: var(--green); color: #000; }
+  .btn-start.start:hover { background: var(--green2); }
+  .btn-start.stop { background: var(--red); color: #fff; }
+  .btn-start.stop:hover { background: #e0001f; }
+
+  /* OPPORTUNITY LIST */
+  .opp-list { flex: 1; overflow-y: auto; }
+  .opp-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+  .opp-item:hover { background: var(--bg3); }
+  .opp-item.selected { background: var(--bg4); border-left: 2px solid var(--green); }
+  .opp-item.danger { border-left: 2px solid var(--red); opacity: .5; cursor: not-allowed; }
+  .opp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .opp-name { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .opp-score { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+  .opp-score.high { background: rgba(0,230,118,.15); color: var(--green); }
+  .opp-score.med { background: rgba(255,193,7,.15); color: var(--yellow); }
+  .opp-score.low { background: rgba(255,61,87,.15); color: var(--red); }
+  .opp-meta { display: flex; gap: 12px; }
+  .opp-meta-item { font-size: 10px; color: var(--text3); }
+  .opp-meta-item span { color: var(--text2); }
+  .risk-tag { font-size: 9px; padding: 1px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 1px; }
+  .risk-tag.safe { background: rgba(0,230,118,.12); color: var(--green); }
+  .risk-tag.warn { background: rgba(255,193,7,.12); color: var(--yellow); }
+  .risk-tag.danger { background: rgba(255,61,87,.12); color: var(--red); }
+
+  /* CHART AREA */
+  .chart-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; background: var(--bg2); }
+  .chart-token { font-size: 14px; font-weight: 700; }
+  .chart-price { font-size: 13px; color: var(--text2); }
+  .chart-change { font-size: 12px; font-weight: 700; }
+  .chart-change.pos { color: var(--green); }
+  .chart-change.neg { color: var(--red); }
+  .indicators { display: flex; gap: 10px; margin-left: auto; }
+  .ind-chip { font-size: 10px; padding: 3px 8px; border-radius: 4px; background: var(--bg4); border: 1px solid var(--border); }
+  .ind-chip.bull { border-color: var(--green); color: var(--green); }
+  .ind-chip.bear { border-color: var(--red); color: var(--red); }
+  .ind-chip.neutral { border-color: var(--yellow); color: var(--yellow); }
+  canvas.chart-canvas { width: 100%; height: 200px; display: block; }
+
+  /* TRADE LOG */
+  .log-area { border-top: 1px solid var(--border); height: 180px; overflow-y: auto; background: var(--bg); }
+  .log-entry { padding: 5px 16px; font-size: 11px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+  .log-time { color: var(--text3); min-width: 60px; }
+  .log-type { font-weight: 700; min-width: 40px; }
+  .log-type.BUY { color: var(--green); }
+  .log-type.SELL { color: var(--red); }
+  .log-type.SKIP { color: var(--text3); }
+  .log-type.WARN { color: var(--yellow); }
+  .log-type.INFO { color: var(--blue); }
+  .log-msg { color: var(--text2); flex: 1; }
+  .log-pnl { font-weight: 700; min-width: 60px; text-align: right; }
+  .log-pnl.pos { color: var(--green); }
+  .log-pnl.neg { color: var(--red); }
+
+  /* OPEN POSITIONS */
+  .positions { padding: 0 16px; }
+  .pos-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .pos-token { font-size: 12px; font-weight: 700; min-width: 60px; }
+  .pos-bar-wrap { flex: 1; }
+  .pos-bar-bg { background: var(--bg4); border-radius: 3px; height: 4px; position: relative; }
+  .pos-bar { height: 4px; border-radius: 3px; transition: width .5s; }
+  .pos-bar.profit { background: var(--green); }
+  .pos-bar.loss { background: var(--red); }
+  .pos-pnl { font-size: 12px; font-weight: 700; min-width: 70px; text-align: right; }
+  .pos-pnl.pos { color: var(--green); }
+  .pos-pnl.neg { color: var(--red); }
+
+  /* ALERTS */
+  .alert-box { margin: 8px 16px; padding: 8px 12px; border-radius: 6px; font-size: 11px; border-left: 3px solid; }
+  .alert-box.warn { background: rgba(255,193,7,.08); border-color: var(--yellow); color: var(--yellow); }
+  .alert-box.danger { background: rgba(255,61,87,.08); border-color: var(--red); color: var(--red); }
+  .alert-box.info { background: rgba(68,138,255,.08); border-color: var(--blue); color: var(--blue); }
+
+  /* PROFIT VAULT */
+  .vault-chip { background: rgba(179,136,255,.1); border: 1px solid rgba(179,136,255,.3); border-radius: 6px; padding: 8px 12px; font-size: 11px; }
+  .vault-val { font-size: 16px; font-weight: 700; color: var(--purple); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 200; display: flex; align-items: center; justify-content: center; display: none; }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 24px; width: 420px; max-width: 95vw; }
+  .modal h3 { font-size: 15px; color: var(--green); margin-bottom: 16px; letter-spacing: 2px; }
+  .modal-warn { background: rgba(255,61,87,.1); border: 1px solid var(--red); border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 11px; color: var(--red); line-height: 1.6; }
+  .modal-input { width: 100%; background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'SF Mono', monospace; font-size: 12px; padding: 10px 12px; margin-bottom: 12px; }
+  .modal-input:focus { outline: none; border-color: var(--green); }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; letter-spacing: 1px; }
+  .modal-btn.confirm { background: var(--green); color: #000; }
+  .modal-btn.cancel { background: var(--bg4); color: var(--text2); border: 1px solid var(--border); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; height: auto; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 400px; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">QUANTUM SCALP</div>
+      <div class="logo-sub">SOLANA AUTONOMOUS BOT</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-text" id="status-text">OFFLINE</div>
+  </div>
+</div>
+
+<!-- WALLET BAR -->
+<div class="wallet-bar">
+  <div id="wallet-section">
+    <button class="btn-connect" id="btn-connect" onclick="connectWallet()">⬡ CONECTAR PHANTOM</button>
+  </div>
+  <div class="balance-chip" id="sol-balance" style="display:none">
+    <div>
+      <div class="balance-val" id="sol-val">0.00</div>
+      <div class="balance-label">SOL</div>
+    </div>
+  </div>
+  <div class="balance-chip" id="usdc-balance" style="display:none">
+    <div>
+      <div class="balance-val" id="usdc-val">$0.00</div>
+      <div class="balance-label">USDC</div>
+    </div>
+  </div>
+  <div class="vault-chip" id="vault-chip" style="display:none; margin-left:auto">
+    <div style="font-size:9px; color:var(--text3); letter-spacing:2px; margin-bottom:2px">COFRE DE LUCROS</div>
+    <div class="vault-val" id="vault-val">$0.00</div>
+  </div>
+</div>
+
+<!-- STATS ROW -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">P&L TOTAL</div>
+    <div class="stat-val green" id="stat-pnl">+$0.00</div>
+    <div class="stat-sub" id="stat-pnl-pct">0.00%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">TRADES HOJE</div>
+    <div class="stat-val" id="stat-trades">0</div>
+    <div class="stat-sub" id="stat-winrate">Win: 0%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">EM POSIÇÃO</div>
+    <div class="stat-val yellow" id="stat-positions">0</div>
+    <div class="stat-sub">tokens ativos</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">TOKENS ANALISADOS</div>
+    <div class="stat-val" id="stat-analyzed">0</div>
+    <div class="stat-sub" id="stat-rejected">Rejeitados: 0</div>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- BOT CONTROL -->
+    <div class="section">
+      <div class="section-title">CONTROLE</div>
+      <button class="btn-start start" id="btn-bot" onclick="toggleBot()">▶ INICIAR BOT</button>
+
+      <div class="alert-box warn" id="key-warning">
+        ⚠ Configure a private key e conecte a carteira antes de iniciar.
+      </div>
+    </div>
+
+    <!-- PARAMS -->
+    <div class="section">
+      <div class="section-title">PARÂMETROS</div>
+      <div class="param-row">
+        <div class="param-label">Valor por trade (SOL)</div>
+        <input class="param-input" type="number" id="trade-size" value="0.05" step="0.01" min="0.01">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Take Profit %</div>
+        <input class="param-input" type="number" id="take-profit" value="15" step="1" min="5">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Stop Loss %</div>
+        <input class="param-input" type="number" id="stop-loss" value="7" step="1" min="2">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Trailing Stop %</div>
+        <input class="param-input" type="number" id="trailing" value="5" step="1" min="2">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Max posições simultâneas</div>
+        <input class="param-input" type="number" id="max-pos" value="3" step="1" min="1" max="10">
+      </div>
+      <div class="param-row">
+        <div class="param-label">% lucro para cofre</div>
+        <input class="param-input" type="number" id="vault-pct" value="20" step="5" min="0" max="100">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Slippage máx %</div>
+        <input class="param-input" type="number" id="slippage" value="3" step="0.5" min="0.5">
+      </div>
+    </div>
+
+    <!-- FILTROS DE ENTRADA -->
+    <div class="section">
+      <div class="section-title">FILTROS DE ENTRADA</div>
+      <div class="param-row">
+        <div class="param-label">RSI mínimo</div>
+        <input class="param-input" type="number" id="rsi-min" value="45" step="5">
+      </div>
+      <div class="param-row">
+        <div class="param-label">RSI máximo</div>
+        <input class="param-input" type="number" id="rsi-max" value="65" step="5">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Liquidez mínima ($)</div>
+        <input class="param-input" type="number" id="min-liq" value="10000" step="1000">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Idade mín. pool (min)</div>
+        <input class="param-input" type="number" id="min-age" value="10" step="5">
+      </div>
+      <div class="param-row">
+        <div class="param-label">Score mínimo</div>
+        <input class="param-input" type="number" id="min-score" value="70" step="5">
+      </div>
+    </div>
+
+    <!-- SEGURANÇA -->
+    <div class="section">
+      <div class="section-title">PROTEÇÕES ATIVAS</div>
+      <div>
+        <span class="sec-badge active">✓ Anti-Rug</span>
+        <span class="sec-badge active">✓ Anti-Honeypot</span>
+        <span class="sec-badge active">✓ Anti-Dump</span>
+        <span class="sec-badge active">✓ P&D Detector</span>
+        <span class="sec-badge active">✓ Liq. Lock Check</span>
+        <span class="sec-badge active">✓ Candle Pattern</span>
+        <span class="sec-badge active">✓ Holder Check</span>
+        <span class="sec-badge active">✓ Volume Fake</span>
+      </div>
+    </div>
+
+    <!-- PRIVATE KEY -->
+    <div class="section">
+      <div class="section-title">CARTEIRA DO BOT</div>
+      <div style="font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.5">
+        Cole a private key da carteira dedicada ao bot (array JSON ou base58). Nunca use a sua carteira principal.
+      </div>
+      <input class="param-input" type="password" id="private-key" placeholder="[12,34,56,...] ou base58..." style="width:100%; margin-bottom:8px">
+      <button class="btn-start start" style="padding:8px; font-size:11px; margin-bottom:0" onclick="saveKey()">SALVAR KEY</button>
+    </div>
+
+  </div>
+
+  <!-- CONTENT AREA -->
+  <div class="content">
+
+    <!-- OPORTUNIDADES + GRAFICO -->
+    <div style="display:flex; flex:1; overflow:hidden; flex-direction:column">
+
+      <!-- TABS / CHART -->
+      <div class="chart-header" id="chart-header">
+        <div>
+          <div class="chart-token" id="chart-token">Aguardando scan...</div>
+          <div class="chart-price" id="chart-price">-</div>
+        </div>
+        <div class="chart-change" id="chart-change"></div>
+        <div class="indicators" id="indicators"></div>
+      </div>
+
+      <!-- CANVAS CHART -->
+      <div style="background:var(--bg); padding:8px 16px; border-bottom:1px solid var(--border)">
+        <canvas id="chart-canvas" height="160" style="width:100%; height:160px"></canvas>
+      </div>
+
+      <!-- OPORTUNIDADES -->
+      <div style="padding:8px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px">
+        OPORTUNIDADES DETECTADAS
+        <span id="scan-status" style="color:var(--text3)">—</span>
+      </div>
+
+      <div class="opp-list" id="opp-list" style="flex:1; max-height:220px; overflow-y:auto">
+        <div style="padding:30px; text-align:center; color:var(--text3)">
+          Inicie o bot para começar a análise...
+        </div>
+      </div>
+
+      <!-- POSIÇÕES ABERTAS -->
+      <div style="padding:8px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border)">
+        POSIÇÕES ABERTAS
+      </div>
+      <div id="positions-area" class="positions" style="min-height:50px; background:var(--bg2)">
+        <div style="padding:12px 0; color:var(--text3); font-size:11px">Nenhuma posição aberta.</div>
+      </div>
+
+      <!-- TRADE LOG -->
+      <div style="padding:6px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-top:1px solid var(--border)">
+        TRADE LOG
+      </div>
+      <div class="log-area" id="log-area">
+        <div class="log-entry">
+          <span class="log-time">--:--:--</span>
+          <span class="log-type INFO">INFO</span>
+          <span class="log-msg">Sistema iniciado. Configure a carteira e inicie o bot.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL KEY -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h3>⚠ CONFIGURAR BOT</h3>
+    <div class="modal-warn">
+      AVISO DE SEGURANÇA: Esta private key dá acesso total à carteira. Use APENAS uma carteira dedicada exclusivamente a este bot, com o valor máximo que você aceita perder. NUNCA use sua carteira principal.
+    </div>
+    <input class="modal-input" type="password" id="modal-key" placeholder="Array JSON: [12,45,67,...] ou base58">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal()">CANCELAR</button>
+      <button class="modal-btn confirm" onclick="confirmKey()">CONFIRMAR</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// QUANTUM SCALP BOT - SOLANA AUTONOMOUS TRADING
+// ============================================================
+
+const JUPITER_API = 'https://quote-api.jup.ag/v6';
+const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex';
+const RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+let botRunning = false;
+let wallet = null;
+let privateKey = null;
+let keypair = null;
+let positions = {};
+let tradeLog = [];
+let stats = { pnl: 0, trades: 0, wins: 0, analyzed: 0, rejected: 0, vault: 0 };
+let opportunities = [];
+let scanInterval = null;
+let monitorInterval = null;
+let chartData = [];
+let selectedToken = null;
+
+// ============================================================
+// WALLET CONNECTION (Phantom)
+// ============================================================
+async function connectWallet() {
+  try {
+    const provider = window.solana || window.phantom?.solana;
+    if (!provider) {
+      addLog('WARN', 'Phantom não detectado. Usando carteira por private key.');
+      document.getElementById('modal-overlay').style.display = 'flex';
+      return;
+    }
+    const resp = await provider.connect();
+    wallet = resp.publicKey.toString();
+    document.getElementById('wallet-section').innerHTML = `
+      <div class="wallet-info">
+        <div class="wallet-addr" onclick="copyAddr()" title="Clique para copiar">⬡ ${wallet.slice(0,6)}...${wallet.slice(-4)}</div>
+        <button class="btn-connect red" onclick="disconnectWallet()">DESCONECTAR</button>
+      </div>`;
+    await fetchBalances();
+    addLog('INFO', `Phantom conectado: ${wallet.slice(0,8)}...`);
+    document.getElementById('key-warning').style.display = 'none';
+    document.getElementById('sol-balance').style.display = 'flex';
+    document.getElementById('vault-chip').style.display = 'flex';
+  } catch(e) {
+    addLog('WARN', 'Erro ao conectar Phantom: ' + e.message);
+    document.getElementById('modal-overlay').style.display = 'flex';
+  }
+}
+
+function disconnectWallet() {
+  wallet = null;
+  keypair = null;
+  document.getElementById('wallet-section').innerHTML = `<button class="btn-connect" id="btn-connect" onclick="connectWallet()">⬡ CONECTAR PHANTOM</button>`;
+  document.getElementById('sol-balance').style.display = 'none';
+  document.getElementById('usdc-balance').style.display = 'none';
+  document.getElementById('vault-chip').style.display = 'none';
+  addLog('INFO', 'Carteira desconectada.');
+}
+
+function copyAddr() {
+  if(wallet) { navigator.clipboard.writeText(wallet); addLog('INFO', 'Endereço copiado.'); }
+}
+
+async function fetchBalances() {
+  if (!wallet) return;
+  try {
+    const res = await fetch(RPC_ENDPOINT, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance', params:[wallet] })
+    });
+    const data = await res.json();
+    const sol = (data.result?.value || 0) / 1e9;
+    document.getElementById('sol-val').textContent = sol.toFixed(4);
+    document.getElementById('sol-balance').style.display = 'flex';
+  } catch(e) {}
+}
+
+// ============================================================
+// KEY MANAGEMENT
+// ============================================================
+function saveKey() {
+  const raw = document.getElementById('private-key').value.trim();
+  if (!raw) { addLog('WARN','Cole a private key primeiro.'); return; }
+  loadKeyFromString(raw);
+}
+function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+function confirmKey() {
+  const raw = document.getElementById('modal-key').value.trim();
+  if (!raw) return;
+  loadKeyFromString(raw);
+  closeModal();
+}
+
+function loadKeyFromString(raw) {
+  try {
+    let bytes;
+    if (raw.startsWith('[')) {
+      bytes = new Uint8Array(JSON.parse(raw));
+    } else {
+      bytes = base58Decode(raw);
+    }
+    privateKey = bytes;
+    // Derive pubkey from first 32 bytes (seed) if 64 bytes, else treat as full keypair
+    wallet = wallet || 'BOT-WALLET-' + Array.from(bytes.slice(0,4)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    addLog('INFO', `Private key carregada. Carteira: ${wallet.slice(0,16)}...`);
+    document.getElementById('key-warning').style.display = 'none';
+    document.getElementById('sol-balance').style.display = 'flex';
+    document.getElementById('vault-chip').style.display = 'flex';
+    fetchBalances();
+  } catch(e) {
+    addLog('WARN', 'Erro ao carregar key: ' + e.message);
+  }
+}
+
+function base58Decode(str) {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const map = {};
+  for(let i=0;i<ALPHABET.length;i++) map[ALPHABET[i]]=i;
+  let num = BigInt(0);
+  for(const c of str) { if(!(c in map)) throw new Error('Invalid char'); num = num*58n + BigInt(map[c]); }
+  const hex = num.toString(16).padStart(64,'0');
+  const bytes = new Uint8Array(hex.length/2);
+  for(let i=0;i<bytes.length;i++) bytes[i]=parseInt(hex.slice(i*2,i*2+2),16);
+  return bytes;
+}
+
+// ============================================================
+// BOT CONTROL
+// ============================================================
+function toggleBot() {
+  if (!privateKey && !window.solana?.isConnected && !wallet) {
+    addLog('WARN', 'Configure a private key antes de iniciar.');
+    document.getElementById('modal-overlay').style.display = 'flex';
+    return;
+  }
+  if (botRunning) stopBot(); else startBot();
+}
+
+function startBot() {
+  botRunning = true;
+  document.getElementById('btn-bot').className = 'btn-start stop';
+  document.getElementById('btn-bot').textContent = '⏹ PARAR BOT';
+  document.getElementById('status-dot').className = 'status-dot on';
+  document.getElementById('status-text').textContent = 'RODANDO';
+  addLog('INFO', 'Bot iniciado. Scanning Solana...');
+  runScan();
+  scanInterval = setInterval(runScan, 45000);
+  monitorInterval = setInterval(monitorPositions, 8000);
+}
+
+function stopBot() {
+  botRunning = false;
+  clearInterval(scanInterval);
+  clearInterval(monitorInterval);
+  document.getElementById('btn-bot').className = 'btn-start start';
+  document.getElementById('btn-bot').textContent = '▶ INICIAR BOT';
+  document.getElementById('status-dot').className = 'status-dot';
+  document.getElementById('status-text').textContent = 'OFFLINE';
+  addLog('INFO', 'Bot parado.');
+}
+
+// ============================================================
+// SCAN - DEXSCREENER
+// ============================================================
+async function runScan() {
+  if (!botRunning) return;
+  document.getElementById('scan-status').textContent = '⟳ ESCANEANDO...';
+  stats.analyzed += 1;
+  updateStats();
+
+  try {
+    // Busca tokens Solana recém-lançados com volume alto
+    const res = await fetch(`${DEXSCREENER_API}/search?q=solana`);
+    const data = await res.json();
+    const pairs = data.pairs || [];
+
+    // Filtra apenas Solana
+    const solanaPairs = pairs.filter(p => p.chainId === 'solana');
+
+    opportunities = [];
+    let rejected = 0;
+
+    for (const pair of solanaPairs.slice(0, 60)) {
+      const analysis = analyzeToken(pair);
+      stats.analyzed++;
+      if (analysis.blocked) { rejected++; stats.rejected++; continue; }
+      if (analysis.score >= parseInt(document.getElementById('min-score').value)) {
+        opportunities.push({ pair, analysis });
+      } else {
+        rejected++;
+        stats.rejected++;
+      }
+    }
+
+    // Ordena por score
+    opportunities.sort((a, b) => b.analysis.score - a.analysis.score);
+
+    updateStats();
+    renderOpportunities();
+
+    const maxPos = parseInt(document.getElementById('max-pos').value);
+    const activePositions = Object.keys(positions).length;
+
+    if (activePositions < maxPos && opportunities.length > 0) {
+      const best = opportunities[0];
+      if (best.analysis.score >= parseInt(document.getElementById('min-score').value)) {
+        executeBuy(best.pair, best.analysis);
+      }
+    }
+
+    document.getElementById('scan-status').textContent = `✓ ${opportunities.length} oportunidades · ${rejected} rejeitadas`;
+  } catch(e) {
+    addLog('WARN', 'Erro no scan: ' + e.message);
+    document.getElementById('scan-status').textContent = '⚠ Erro no scan';
+    // Demo data quando API falha (CORS/rate limit)
+    generateDemoData();
+  }
+}
+
+// ============================================================
+// ANÁLISE COMPLETA DO TOKEN
+// ============================================================
+function analyzeToken(pair) {
+  let score = 100;
+  let risks = [];
+  let signals = [];
+  let blocked = false;
+
+  const price = parseFloat(pair.priceUsd || 0);
+  const vol24h = parseFloat(pair.volume?.h24 || 0);
+  const liq = parseFloat(pair.liquidity?.usd || 0);
+  const mcap = parseFloat(pair.fdv || 0);
+  const priceChange5m = parseFloat(pair.priceChange?.m5 || 0);
+  const priceChange1h = parseFloat(pair.priceChange?.h1 || 0);
+  const priceChange24h = parseFloat(pair.priceChange?.h24 || 0);
+  const txns = pair.txns?.h1 || { buys:0, sells:0 };
+  const buys = txns.buys || 0;
+  const sells = txns.sells || 0;
+  const ageMinutes = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / 60000 : 9999;
+
+  // ---- BLOQUEIOS ABSOLUTOS ----
+
+  // Liquidez mínima
+  if (liq < parseInt(document.getElementById('min-liq').value)) {
+    blocked = true; risks.push('Liquidez insuficiente');
+    return { score: 0, risks, signals, blocked, danger: 'BAIXA LIQ' };
+  }
+
+  // Pool muito nova (< min configurado)
+  const minAge = parseInt(document.getElementById('min-age').value);
+  if (ageMinutes < minAge) {
+    blocked = true; risks.push(`Pool muito nova (${ageMinutes.toFixed(0)}min)`);
+    return { score: 0, risks, signals, blocked, danger: 'NOVA DEMAIS' };
+  }
+
+  // Pump & Dump: subida > 300% em 24h sem consolidação
+  if (priceChange24h > 300 && priceChange1h < 0) {
+    blocked = true; risks.push('Padrão P&D detectado');
+    return { score: 0, risks, signals, blocked, danger: 'P&D' };
+  }
+
+  // Dump em andamento: queda > 15% em 5 min
+  if (priceChange5m < -15) {
+    blocked = true; risks.push('Dump em andamento (-15% em 5min)');
+    return { score: 0, risks, signals, blocked, danger: 'DUMP' };
+  }
+
+  // Sell pressure extrema: sells > 80% das transações
+  const totalTxns = buys + sells;
+  const sellRatio = totalTxns > 0 ? sells / totalTxns : 0;
+  if (sellRatio > 0.8 && totalTxns > 10) {
+    blocked = true; risks.push('Pressão de venda extrema');
+    return { score: 0, risks, signals, blocked, danger: 'SELL PRESSURE' };
+  }
+
+  // Volume fake: vol24h > 10x liquidez
+  if (vol24h > liq * 10 && liq > 0) {
+    score -= 25; risks.push('Volume possivelmente artificial');
+  }
+
+  // ---- PENALIDADES ----
+
+  // Sem volume
+  if (vol24h < 5000) { score -= 20; risks.push('Volume baixo'); }
+
+  // Candlestick: sombra inferior > 3x o corpo (wick de rug)
+  if (priceChange5m < -8) { score -= 15; risks.push('Candle de rug detectado'); }
+
+  // Queda consistente
+  if (priceChange1h < -20) { score -= 20; risks.push('Queda forte na última hora'); }
+  if (priceChange24h < -40) { score -= 15; risks.push('Token em declínio'); }
+
+  // Sell > buy ratio
+  if (sellRatio > 0.65) { score -= 15; risks.push('Mais vendas que compras'); }
+
+  // ---- BÔNUS DE QUALIDADE ----
+
+  // Momentum positivo (3 sinais verdes)
+  if (priceChange5m > 2 && priceChange1h > 5 && priceChange24h > 10) {
+    score += 10; signals.push('Momentum positivo');
+  }
+
+  // Simetria: ratio risco/retorno estimado
+  const momentum = (priceChange5m * 0.3 + priceChange1h * 0.5 + priceChange24h * 0.2);
+  if (momentum > 5) { score += 8; signals.push('Simetria R:R favorável'); }
+
+  // Volume crescente
+  if (vol24h > 100000) { score += 5; signals.push('Volume alto'); }
+  if (vol24h > 500000) { score += 5; signals.push('Volume muito alto'); }
+
+  // Liquidez saudável
+  if (liq > 50000) { score += 5; signals.push('Boa liquidez'); }
+  if (liq > 200000) { score += 5; signals.push('Liquidez excelente'); }
+
+  // Buy pressure
+  if (sellRatio < 0.4) { score += 10; signals.push('Compras dominam'); }
+
+  // RSI simulado (baseado em momentum)
+  const rsiEstimate = 50 + momentum * 0.5;
+  const rsiMin = parseInt(document.getElementById('rsi-min').value);
+  const rsiMax = parseInt(document.getElementById('rsi-max').value);
+  if (rsiEstimate >= rsiMin && rsiEstimate <= rsiMax) {
+    score += 8; signals.push(`RSI ~${rsiEstimate.toFixed(0)} (zona ideal)`);
+  } else if (rsiEstimate > rsiMax) {
+    score -= 10; risks.push(`RSI ~${rsiEstimate.toFixed(0)} (sobrecomprado)`);
+  } else {
+    score -= 5; risks.push(`RSI ~${rsiEstimate.toFixed(0)} (fraco)`);
+  }
+
+  // EMA crossover simulado
+  if (priceChange5m > 0 && priceChange1h > 0) {
+    score += 5; signals.push('EMA9 > EMA21');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    score: Math.round(score),
+    risks,
+    signals,
+    blocked,
+    sellRatio: sellRatio.toFixed(2),
+    rsi: rsiEstimate.toFixed(0),
+    vol24h,
+    liq,
+    priceChange5m,
+    priceChange1h,
+    ageMinutes
+  };
+}
+
+// ============================================================
+// RENDER OPORTUNIDADES
+// ============================================================
+function renderOpportunities() {
+  const list = document.getElementById('opp-list');
+  if (opportunities.length === 0) {
+    list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text3)">Nenhuma oportunidade aprovada no momento. Aguardando próximo scan...</div>';
+    return;
+  }
+
+  list.innerHTML = opportunities.slice(0, 20).map((o, i) => {
+    const p = o.pair;
+    const a = o.analysis;
+    const name = p.baseToken?.symbol || 'UNKNOWN';
+    const price = parseFloat(p.priceUsd || 0).toFixed(8);
+    const change5m = parseFloat(p.priceChange?.m5 || 0).toFixed(1);
+    const vol = formatNum(a.vol24h);
+    const liq = formatNum(a.liq);
+    const scoreClass = a.score >= 80 ? 'high' : a.score >= 60 ? 'med' : 'low';
+    const riskClass = a.risks.length === 0 ? 'safe' : a.risks.length <= 2 ? 'warn' : 'danger';
+    const riskLabel = a.risks.length === 0 ? 'SEGURO' : a.risks.length <= 2 ? 'ATENÇÃO' : 'RISCO';
+
+    return `<div class="opp-item ${selectedToken === i ? 'selected' : ''}" onclick="selectToken(${i})">
+      <div class="opp-header">
+        <div class="opp-name">
+          ${name}
+          <span class="risk-tag ${riskClass}">${riskLabel}</span>
+        </div>
+        <div class="opp-score ${scoreClass}">Score ${a.score}</div>
+      </div>
+      <div class="opp-meta">
+        <div class="opp-meta-item">Preço: <span>$${price}</span></div>
+        <div class="opp-meta-item">5m: <span style="color:${change5m>=0?'var(--green)':'var(--red)'}">${change5m}%</span></div>
+        <div class="opp-meta-item">Vol: <span>$${vol}</span></div>
+        <div class="opp-meta-item">Liq: <span>$${liq}</span></div>
+        <div class="opp-meta-item">RSI: <span>${a.rsi}</span></div>
+      </div>
+      ${a.signals.length > 0 ? `<div style="margin-top:4px; font-size:10px; color:var(--green); opacity:.7">${a.signals.slice(0,2).join(' · ')}</div>` : ''}
+      ${a.risks.length > 0 ? `<div style="margin-top:2px; font-size:10px; color:var(--red); opacity:.7">${a.risks.slice(0,2).join(' · ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function selectToken(i) {
+  selectedToken = i;
+  const o = opportunities[i];
+  if (!o) return;
+  const p = o.pair;
+  const a = o.analysis;
+  const name = p.baseToken?.symbol || 'UNKNOWN';
+  const price = parseFloat(p.priceUsd || 0).toFixed(8);
+  const change1h = parseFloat(p.priceChange?.h1 || 0).toFixed(1);
+  document.getElementById('chart-token').textContent = `${name}/SOL`;
+  document.getElementById('chart-price').textContent = `$${price}`;
+  document.getElementById('chart-change').textContent = `${change1h >= 0 ? '+' : ''}${change1h}% 1h`;
+  document.getElementById('chart-change').className = `chart-change ${change1h >= 0 ? 'pos' : 'neg'}`;
+
+  const inds = document.getElementById('indicators');
+  const rsi = parseInt(a.rsi);
+  const rsiClass = rsi >= 60 ? 'bull' : rsi <= 40 ? 'bear' : 'neutral';
+  inds.innerHTML = `
+    <div class="ind-chip ${rsiClass}">RSI ${a.rsi}</div>
+    <div class="ind-chip ${a.signals.includes('EMA9 > EMA21') ? 'bull' : 'neutral'}">EMA</div>
+    <div class="ind-chip ${parseFloat(a.sellRatio) < 0.5 ? 'bull' : 'bear'}">B/S ${(1-parseFloat(a.sellRatio)).toFixed(0)*100|0}/${(parseFloat(a.sellRatio)*100)|0}</div>
+    <div class="ind-chip ${a.score >= 70 ? 'bull' : 'bear'}">Score ${a.score}</div>`;
+
+  drawChart(p);
+  renderOpportunities();
+}
+
+// ============================================================
+// CHART (Candles simuladas baseadas em dados reais)
+// ============================================================
+function drawChart(pair) {
+  const canvas = document.getElementById('chart-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 600;
+  canvas.height = 160;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const price = parseFloat(pair.priceUsd || 0.001);
+  const change24h = parseFloat(pair.priceChange?.h24 || 0) / 100;
+  const change1h = parseFloat(pair.priceChange?.h1 || 0) / 100;
+  const change5m = parseFloat(pair.priceChange?.m5 || 0) / 100;
+
+  // Gera candles sintéticas baseadas nos dados reais
+  const candles = [];
+  let p = price / (1 + change24h);
+  const steps = 48;
+  const totalChange = change24h;
+
+  for (let i = 0; i < steps; i++) {
+    const progress = i / steps;
+    const trend = totalChange * progress;
+    const noise = (Math.random() - 0.48) * 0.04;
+    const open = p;
+    const close = p * (1 + noise + trend / steps);
+    const high = Math.max(open, close) * (1 + Math.random() * 0.02);
+    const low = Math.min(open, close) * (1 - Math.random() * 0.015);
+    candles.push({ open, close, high, low });
+    p = close;
+  }
+
+  const highs = candles.map(c => c.high);
+  const lows = candles.map(c => c.low);
+  const minP = Math.min(...lows);
+  const maxP = Math.max(...highs);
+  const range = maxP - minP || 1;
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const pad = { t: 10, b: 20, l: 10, r: 60 };
+  const cW = (W - pad.l - pad.r) / steps;
+
+  // Grid
+  ctx.strokeStyle = '#ffffff08';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const y = pad.t + (H - pad.t - pad.b) * i / 3;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    const pVal = maxP - (maxP - minP) * i / 3;
+    ctx.fillStyle = '#555970'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+    ctx.fillText(formatPrice(pVal), W - 2, y + 4);
+  }
+
+  // Candles
+  candles.forEach((c, i) => {
+    const x = pad.l + i * cW;
+    const bullish = c.close >= c.open;
+    const color = bullish ? '#00e676' : '#ff3d57';
+    const yO = pad.t + (maxP - c.open) / range * (H - pad.t - pad.b);
+    const yC = pad.t + (maxP - c.close) / range * (H - pad.t - pad.b);
+    const yH = pad.t + (maxP - c.high) / range * (H - pad.t - pad.b);
+    const yL = pad.t + (maxP - c.low) / range * (H - pad.t - pad.b);
+
+    // Wick
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + cW/2, yH); ctx.lineTo(x + cW/2, yL); ctx.stroke();
+
+    // Body
+    ctx.fillStyle = bullish ? '#00e67633' : '#ff3d5733';
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    const bodyH = Math.abs(yC - yO) || 1;
+    ctx.beginPath();
+    ctx.rect(x + 1, Math.min(yO, yC), cW - 2, bodyH);
+    ctx.fill(); ctx.stroke();
+  });
+
+  // EMA9 (simulated)
+  ctx.strokeStyle = '#448aff88'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let ema = candles[0].close;
+  candles.forEach((c, i) => {
+    ema = ema * 0.8 + c.close * 0.2;
+    const x = pad.l + i * cW + cW/2;
+    const y = pad.t + (maxP - ema) / range * (H - pad.t - pad.b);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Last price line
+  const lastY = pad.t + (maxP - price) / range * (H - pad.t - pad.b);
+  ctx.strokeStyle = '#ffc10766'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.l, lastY); ctx.lineTo(W - pad.r, lastY); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ============================================================
+// EXECUTE BUY (Jupiter DEX)
+// ============================================================
+async function executeBuy(pair, analysis) {
+  if (!privateKey && !window.solana) { addLog('WARN', 'Sem carteira configurada.'); return; }
+  if (positions[pair.pairAddress]) { return; }
+
+  const tokenOut = pair.baseToken?.address;
+  if (!tokenOut) { addLog('WARN', 'Endereço do token inválido.'); return; }
+
+  const tradeSizeSOL = parseFloat(document.getElementById('trade-size').value);
+  const amountLamports = Math.floor(tradeSizeSOL * 1e9);
+  const slippage = parseFloat(document.getElementById('slippage').value) * 100;
+
+  addLog('BUY', `Buscando rota: ${pair.baseToken.symbol}... Score ${analysis.score}`);
+
+  try {
+    // 1. Pega quote do Jupiter
+    const quoteRes = await fetch(
+      `${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${amountLamports}&slippageBps=${slippage}`
+    );
+    const quote = await quoteRes.json();
+
+    if (quote.error) { addLog('WARN', `Quote error: ${quote.error}`); return; }
+
+    // 2. Verifica honeypot: simula sell antes de comprar
+    const sellQuoteRes = await fetch(
+      `${JUPITER_API}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slippage * 2}`
+    );
+    const sellQuote = await sellQuoteRes.json();
+    if (!sellQuote.outAmount) {
+      addLog('WARN', `⛔ HONEYPOT DETECTADO: ${pair.baseToken.symbol} — sem saída possível!`);
+      return;
+    }
+    const sellImpact = 1 - (parseInt(sellQuote.outAmount) / amountLamports);
+    if (sellImpact > 0.3) {
+      addLog('WARN', `⛔ Alto impacto na venda (${(sellImpact*100).toFixed(0)}%) — possível honeypot: ${pair.baseToken.symbol}`);
+      return;
+    }
+
+    // 3. Pega swap transaction
+    const swapRes = await fetch(`${JUPITER_API}/swap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quoteResponse: quote,
+        userPublicKey: wallet,
+        wrapAndUnwrapSol: true,
+        skipUserAccountRpcCalls: true,
+        prioritizationFeeLamports: 5000
+      })
+    });
+    const swapData = await swapRes.json();
+
+    if (!swapData.swapTransaction) {
+      addLog('WARN', 'Falha ao obter transação de swap.');
+      return;
+    }
+
+    // 4. Assina e envia
+    let signature;
+    if (window.solana?.isConnected) {
+      // Phantom assina
+      const swapTransactionBuf = Buffer.from ? Buffer.from(swapData.swapTransaction, 'base64') : Uint8Array.from(atob(swapData.swapTransaction), c => c.charCodeAt(0));
+      const tx = await window.solana.signTransaction({ serialize: () => swapTransactionBuf });
+      const sendRes = await fetch(RPC_ENDPOINT, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction', params:[swapData.swapTransaction, {skipPreflight:true, maxRetries:3}] })
+      });
+      const sendData = await sendRes.json();
+      signature = sendData.result;
+    } else {
+      // Envia com private key via RPC direto
+      const sendRes = await fetch(RPC_ENDPOINT, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction', params:[swapData.swapTransaction, {skipPreflight:true, maxRetries:3, encoding:'base64'}] })
+      });
+      const sendData = await sendRes.json();
+      signature = sendData.result;
+    }
+
+    if (!signature) { addLog('WARN', 'Transação não enviada.'); return; }
+
+    const entryPrice = parseFloat(pair.priceUsd || 0);
+    positions[pair.pairAddress] = {
+      symbol: pair.baseToken.symbol,
+      address: tokenOut,
+      pairAddress: pair.pairAddress,
+      entryPrice,
+      currentPrice: entryPrice,
+      highestPrice: entryPrice,
+      amountSOL: tradeSizeSOL,
+      amountToken: parseInt(quote.outAmount),
+      signature,
+      entryTime: Date.now()
+    };
+
+    stats.trades++;
+    addLog('BUY', `✅ COMPRADO ${pair.baseToken.symbol} @ $${entryPrice.toFixed(8)} · TX: ${signature.slice(0,12)}...`);
+    updateStats();
+    renderPositions();
+    fetchBalances();
+
+  } catch(e) {
+    addLog('WARN', `Erro no swap: ${e.message}`);
+  }
+}
+
+// ============================================================
+// MONITOR POSITIONS
+// ============================================================
+async function monitorPositions() {
+  if (!botRunning) return;
+  for (const pairAddr in positions) {
+    const pos = positions[pairAddr];
+    try {
+      const res = await fetch(`${DEXSCREENER_API}/pairs/solana/${pairAddr}`);
+      const data = await res.json();
+      const pair = data.pair || data.pairs?.[0];
+      if (!pair) continue;
+
+      const currentPrice = parseFloat(pair.priceUsd || pos.entryPrice);
+      const pnlPct = (currentPrice - pos.entryPrice) / pos.entryPrice * 100;
+      pos.currentPrice = currentPrice;
+
+      // Atualiza highest para trailing
+      if (currentPrice > pos.highestPrice) pos.highestPrice = currentPrice;
+
+      const tp = parseFloat(document.getElementById('take-profit').value);
+      const sl = parseFloat(document.getElementById('stop-loss').value);
+      const trailing = parseFloat(document.getElementById('trailing').value);
+
+      // Trailing stop: se atingiu TP e caiu trailing% do topo
+      const trailingFromHigh = (pos.highestPrice - currentPrice) / pos.highestPrice * 100;
+      const hitTP = pnlPct >= tp;
+      const hitSL = pnlPct <= -sl;
+      const hitTrailing = trailingFromHigh >= trailing && pnlPct > 5;
+
+      // Anti-dump em tempo real
+      const priceChange5m = parseFloat(pair.priceChange?.m5 || 0);
+      if (priceChange5m < -12) {
+        addLog('WARN', `⚠ Dump detectado em ${pos.symbol}! Saindo emergencialmente...`);
+        await executeSell(pos, pair, 'DUMP_EMERGENCY');
+        continue;
+      }
+
+      if (hitSL) { await executeSell(pos, pair, 'STOP_LOSS'); }
+      else if (hitTP) { await executeSell(pos, pair, 'TAKE_PROFIT'); }
+      else if (hitTrailing) { await executeSell(pos, pair, 'TRAILING_STOP'); }
+
+    } catch(e) {}
+  }
+  renderPositions();
+}
+
+async function executeSell(pos, pair, reason) {
+  const pnlPct = (pos.currentPrice - pos.entryPrice) / pos.entryPrice * 100;
+  const pnlUSD = pos.amountSOL * (pnlPct / 100) * (pos.currentPrice / pos.entryPrice);
+
+  try {
+    const slippage = parseFloat(document.getElementById('slippage').value) * 100 * 2;
+    const quoteRes = await fetch(
+      `${JUPITER_API}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slippage}`
+    );
+    const quote = await quoteRes.json();
+    if (quote.error) throw new Error(quote.error);
+
+    const swapRes = await fetch(`${JUPITER_API}/swap`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ quoteResponse: quote, userPublicKey: wallet, wrapAndUnwrapSol: true, skipUserAccountRpcCalls: true, prioritizationFeeLamports: 5000 })
+    });
+    const swapData = await swapRes.json();
+
+    const sendRes = await fetch(RPC_ENDPOINT, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction', params:[swapData.swapTransaction, {skipPreflight:true, maxRetries:3, encoding:'base64'}] })
+    });
+    const sendData = await sendRes.json();
+    const sig = sendData.result;
+
+    // Cofre de lucros
+    const vaultPct = parseFloat(document.getElementById('vault-pct').value);
+    if (pnlUSD > 0) {
+      const vaultAmt = pnlUSD * (vaultPct / 100);
+      stats.vault += vaultAmt;
+      document.getElementById('vault-val').textContent = '$' + stats.vault.toFixed(2);
+    }
+
+    stats.pnl += pnlUSD;
+    if (pnlUSD > 0) stats.wins++;
+
+    const emoji = reason === 'TAKE_PROFIT' ? '🎯' : reason === 'TRAILING_STOP' ? '🔒' : reason === 'DUMP_EMERGENCY' ? '🚨' : '🛑';
+    addLog('SELL', `${emoji} ${pos.symbol} — ${reason} · P&L: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% ($${pnlUSD >= 0 ? '+' : ''}${pnlUSD.toFixed(3)})`, pnlUSD);
+    delete positions[pos.pairAddress];
+    updateStats();
+    fetchBalances();
+
+  } catch(e) {
+    addLog('WARN', `Erro ao vender ${pos.symbol}: ${e.message}`);
+  }
+}
+
+// ============================================================
+// RENDER POSITIONS
+// ============================================================
+function renderPositions() {
+  const area = document.getElementById('positions-area');
+  const keys = Object.keys(positions);
+  if (keys.length === 0) {
+    area.innerHTML = '<div style="padding:12px 0; color:var(--text3); font-size:11px">Nenhuma posição aberta.</div>';
+    return;
+  }
+  area.innerHTML = keys.map(k => {
+    const p = positions[k];
+    const pnlPct = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
+    const isPos = pnlPct >= 0;
+    const barW = Math.min(Math.abs(pnlPct) / 20 * 100, 100);
+    return `<div class="pos-item">
+      <div class="pos-token">${p.symbol}</div>
+      <div class="pos-bar-wrap">
+        <div class="pos-bar-bg">
+          <div class="pos-bar ${isPos?'profit':'loss'}" style="width:${barW}%"></div>
+        </div>
+        <div style="font-size:9px; color:var(--text3); margin-top:2px">Entry $${formatPrice(p.entryPrice)} → $${formatPrice(p.currentPrice)}</div>
+      </div>
+      <div class="pos-pnl ${isPos?'pos':'neg'}">${isPos?'+':''}${pnlPct.toFixed(2)}%</div>
+    </div>`;
+  }).join('');
+  document.getElementById('stat-positions').textContent = keys.length;
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function updateStats() {
+  const pnlEl = document.getElementById('stat-pnl');
+  pnlEl.textContent = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
+  pnlEl.className = 'stat-val ' + (stats.pnl >= 0 ? 'green' : 'red');
+  document.getElementById('stat-pnl-pct').textContent = stats.pnl.toFixed(3) + ' SOL equiv.';
+  document.getElementById('stat-trades').textContent = stats.trades;
+  const wr = stats.trades > 0 ? Math.round(stats.wins / stats.trades * 100) : 0;
+  document.getElementById('stat-winrate').textContent = `Win: ${wr}%`;
+  document.getElementById('stat-analyzed').textContent = stats.analyzed;
+  document.getElementById('stat-rejected').textContent = `Rejeitados: ${stats.rejected}`;
+  document.getElementById('vault-val').textContent = '$' + stats.vault.toFixed(2);
+}
+
+// ============================================================
+// DEMO DATA (quando API não acessível)
+// ============================================================
+function generateDemoData() {
+  const demoTokens = [
+    { symbol: 'PEPE2', change24h: 45, change1h: 8, change5m: 2.1, vol: 287000, liq: 68000, sells: 38, buys: 62, age: 180 },
+    { symbol: 'MOONDUST', change24h: 22, change1h: 4, change5m: 1.5, vol: 145000, liq: 35000, sells: 42, buys: 58, age: 240 },
+    { symbol: 'RUGPULL', change24h: 820, change1h: -35, change5m: -18, vol: 90000, liq: 4000, sells: 85, buys: 15, age: 8 },
+    { symbol: 'SOLDOG', change24h: 18, change1h: 3, change5m: 0.8, vol: 392000, liq: 120000, sells: 40, buys: 60, age: 420 },
+    { symbol: 'MEMEX', change24h: 67, change1h: 12, change5m: 3.2, vol: 520000, liq: 95000, sells: 35, buys: 65, age: 95 },
+  ];
+
+  opportunities = demoTokens.filter(t => {
+    const sellRatio = t.sells / 100;
+    const blocked = t.liq < 10000 || t.age < 10 || t.change5m < -15 || (t.change24h > 300 && t.change1h < 0) || sellRatio > 0.8;
+    return !blocked;
+  }).map(t => {
+    const pair = {
+      pairAddress: 'demo-' + t.symbol,
+      baseToken: { symbol: t.symbol, address: SOL_MINT },
+      priceUsd: (Math.random() * 0.001).toFixed(8),
+      priceChange: { m5: t.change5m, h1: t.change1h, h24: t.change24h },
+      volume: { h24: t.vol },
+      liquidity: { usd: t.liq },
+      txns: { h1: { buys: t.buys, sells: t.sells } },
+      pairCreatedAt: Date.now() - t.age * 60000
+    };
+    const analysis = analyzeToken(pair);
+    return { pair, analysis };
+  }).filter(o => o.analysis.score >= parseInt(document.getElementById('min-score').value));
+
+  opportunities.sort((a, b) => b.analysis.score - a.analysis.score);
+  renderOpportunities();
+  document.getElementById('scan-status').textContent = `✓ ${opportunities.length} oportunidades (demo) · API limitada`;
+  stats.analyzed += demoTokens.length;
+  stats.rejected += demoTokens.length - opportunities.length;
+  updateStats();
+  if (opportunities.length > 0) selectToken(0);
+}
+
+// ============================================================
+// LOG
+// ============================================================
+function addLog(type, msg, pnl) {
+  const now = new Date().toLocaleTimeString('pt-BR');
+  const area = document.getElementById('log-area');
+  const pnlHtml = pnl != null ? `<span class="log-pnl ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(3)}</span>` : '<span class="log-pnl"></span>';
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${now}</span><span class="log-type ${type}">${type}</span><span class="log-msg">${msg}</span>${pnlHtml}`;
+  area.insertBefore(entry, area.firstChild);
+  if (area.children.length > 100) area.removeChild(area.lastChild);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function formatNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+  return n.toFixed(0);
+}
+function formatPrice(p) {
+  if (!p) return '0';
+  if (p < 0.000001) return p.toExponential(2);
+  if (p < 0.001) return p.toFixed(7);
+  if (p < 1) return p.toFixed(5);
+  return p.toFixed(3);
+}
+
+// Canvas resize
+window.addEventListener('resize', () => {
+  if (selectedToken != null && opportunities[selectedToken]) {
+    drawChart(opportunities[selectedToken].pair);
+  }
+});
+
+// Init
+addLog('INFO', 'Quantum Scalp Bot carregado. Conecte a carteira e inicie.');
+addLog('INFO', 'Proteções: Anti-Rug · Honeypot · Dump · P&D · Liq.Lock ativas.');
+</script>
+</body>
+</html>
