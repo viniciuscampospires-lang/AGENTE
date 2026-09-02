@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QUANTUM SCALP · Solana AI Bot</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- solana/web3.js para assinar tx via Phantom ou private key -->
+<script src="https://unpkg.com/@solana/web3.js@1.95.8/lib/index.iife.min.js"></script>
 <style>
 :root{--bg:#080a10;--bg2:#0c0f18;--bg3:#10131f;--bg4:#161926;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);--green:#00e676;--green2:#00c853;--red:#ff3d57;--yellow:#ffc107;--blue:#448aff;--purple:#b388ff;--text:#dde1f0;--text2:#7a7f98;--text3:#454860;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -144,6 +146,11 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
 #qr-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0;}
 #qr-wrap canvas,#qr-wrap img{border-radius:8px;border:4px solid #fff;}
 .qraddr{font-size:10px;color:var(--text2);word-break:break-all;background:var(--bg4);padding:7px;border-radius:6px;text-align:center;margin-top:4px;}
+/* badge modo assinatura */
+.sign-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:3px 9px;border-radius:4px;margin-left:8px;font-weight:700;letter-spacing:1px;}
+.sign-badge.phantom{background:rgba(171,107,255,.12);border:1px solid rgba(171,107,255,.3);color:#ab6bff;}
+.sign-badge.key{background:rgba(255,193,7,.1);border:1px solid rgba(255,193,7,.25);color:var(--yellow);}
+.sign-badge.ro{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text3);}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 @media(max-width:900px){.main{grid-template-columns:1fr;}.aipanel{height:320px;border-left:none;border-top:1px solid var(--border);}.stats-row{grid-template-columns:repeat(3,1fr);}}
@@ -167,12 +174,13 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
 
 <div class="wbar">
   <div id="wsec">
-    <button class="btnw" onclick="connectPhantom()">⬡ PHANTOM</button>
-    <button class="btnw wc" onclick="showWC()" style="margin-left:8px">◈ QR / WALLETCONNECT</button>
+    <button class="btnw" id="btn-connect" onclick="showWC()">⬡ CONECTAR CARTEIRA</button>
   </div>
   <div class="bal-chip" id="sol-bal" style="display:none">
     <div><div class="bal-val" id="sol-v">0.00</div><div class="bal-lbl">SOL</div></div>
   </div>
+  <!-- badge mostra modo de assinatura ativo -->
+  <span id="sign-mode" style="display:none"></span>
   <div class="vault-chip" id="vault-chip" style="display:none;margin-left:auto">
     <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:2px">COFRE</div>
     <div class="vault-val" id="vault-v">$0.00</div>
@@ -180,7 +188,7 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
 </div>
 
 <div class="stats-row">
-  <div class="sc"><div class="sl">P&L TOTAL</div><div class="sv g" id="s-pnl">+$0.00</div><div class="ssub" id="s-pnlsub">0 SOL</div></div>
+  <div class="sc"><div class="sl">P&amp;L TOTAL</div><div class="sv g" id="s-pnl">+$0.00</div><div class="ssub" id="s-pnlsub">0 SOL</div></div>
   <div class="sc"><div class="sl">TRADES</div><div class="sv" id="s-trades">0</div><div class="ssub" id="s-wr">Win: 0%</div></div>
   <div class="sc"><div class="sl">EM POSIÇÃO</div><div class="sv y" id="s-pos">0</div><div class="ssub">ativos</div></div>
   <div class="sc"><div class="sl">ANALISADOS</div><div class="sv" id="s-ana">0</div><div class="ssub" id="s-rej">Rej: 0</div></div>
@@ -188,11 +196,10 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
 </div>
 
 <div class="main">
-
   <div class="sidebar">
     <div class="sec">
       <div class="sectitle">CONTROLE</div>
-      <button class="btnbot go" id="btn-bot" onclick="toggleBot()">&#9654; INICIAR BOT</button>
+      <button class="btnbot go" id="btn-bot" onclick="toggleBot()">▶ INICIAR BOT</button>
       <div style="font-size:10px;color:var(--text3);line-height:1.6" id="bot-msg">Configure a carteira e inicie.</div>
     </div>
     <div class="sec">
@@ -215,13 +222,13 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
     </div>
     <div class="sec">
       <div class="sectitle">PROTEÇÕES</div>
-      <span class="badge">&#10003; Anti-Rug</span>
-      <span class="badge">&#10003; Honeypot</span>
-      <span class="badge">&#10003; Anti-Dump</span>
-      <span class="badge">&#10003; P&D</span>
-      <span class="badge">&#10003; Sell Pressure</span>
-      <span class="badge">&#10003; Vol.Fake</span>
-      <span class="badge">&#10003; Candle Rug</span>
+      <span class="badge">✓ Anti-Rug</span>
+      <span class="badge">✓ Honeypot</span>
+      <span class="badge">✓ Anti-Dump</span>
+      <span class="badge">✓ P&amp;D</span>
+      <span class="badge">✓ Sell Pressure</span>
+      <span class="badge">✓ Vol.Fake</span>
+      <span class="badge">✓ Candle Rug</span>
     </div>
     <div class="sec">
       <div class="sectitle">PRIVATE KEY (bot dedicado)</div>
@@ -233,15 +240,15 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
 
   <div class="center">
     <div class="chart-hdr">
-      <div><div class="ctok" id="ctok">Aguardando scan...</div><div class="cpx" id="cpx">&#8212;</div></div>
+      <div><div class="ctok" id="ctok">Aguardando scan...</div><div class="cpx" id="cpx">—</div></div>
       <div class="cch" id="cch"></div>
       <div class="inds" id="cinds"></div>
     </div>
     <div style="background:var(--bg);padding:6px 14px;border-bottom:1px solid var(--border)">
-      <canvas id="chart-canvas" height="150" style="width:100%;height:150px;display:block"></canvas>
+      <canvas id="chart-canvas" style="width:100%;height:150px;display:block"></canvas>
     </div>
     <div style="padding:6px 14px;font-size:9px;color:var(--text3);letter-spacing:3px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
-      OPORTUNIDADES <span id="scan-st" style="color:var(--text3)">&#8212;</span>
+      OPORTUNIDADES <span id="scan-st" style="color:var(--text3)">—</span>
     </div>
     <div class="opp-list" id="opp-list" style="max-height:190px">
       <div style="padding:26px;text-align:center;color:var(--text3)">Inicie o bot para começar a análise...</div>
@@ -268,263 +275,484 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code',mo
     </div>
     <div class="ai-inp-area">
       <div class="ai-quick">
-        <button class="aqb" onclick="askAI('Analise o mercado Solana agora e me diga o que esperar')">&#128202; Mercado</button>
-        <button class="aqb" onclick="askAI('Quais tokens Solana têm melhor potencial para scalp hoje?')">&#128293; Top tokens</button>
-        <button class="aqb" onclick="askAI('Explique minha estratégia atual: TP, SL e trailing')">&#127919; Estratégia</button>
-        <button class="aqb" onclick="askAI('Quais padrões de rug pull e dump devo evitar?')">&#9888;&#65039; Riscos</button>
-        <button class="aqb" onclick="askAICtx()">&#128200; Posições</button>
+        <button class="aqb" onclick="askAI('Analise o mercado Solana agora e me diga o que esperar')">📊 Mercado</button>
+        <button class="aqb" onclick="askAI('Quais tokens Solana têm melhor potencial para scalp hoje?')">🔥 Top tokens</button>
+        <button class="aqb" onclick="askAI('Explique minha estratégia atual: TP, SL e trailing')">🎯 Estratégia</button>
+        <button class="aqb" onclick="askAI('Quais padrões de rug pull e dump devo evitar?')">⚠️ Riscos</button>
+        <button class="aqb" onclick="askAICtx()">📈 Posições</button>
       </div>
       <div class="ai-row">
         <input class="ai-in" id="ai-input" placeholder="Pergunte sobre o mercado..." onkeydown="if(event.key==='Enter')sendAI()">
-        <button class="ai-send" onclick="sendAI()">&#9654;</button>
+        <button class="ai-send" onclick="sendAI()">▶</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- MODAL QR / WALLETCONNECT -->
+<!-- MODAL QR / KEY -->
 <div class="modal-ov" id="modal-wc">
   <div class="modal">
-    <h3>&#9672; CONECTAR CARTEIRA</h3>
-    <div class="wctabs">
-      <button class="wctab active" id="tab-qr" onclick="switchTab('qr')">QR CODE</button>
-      <button class="wctab" id="tab-key" onclick="switchTab('key')">PRIVATE KEY</button>
+    <h3>◈ CONECTAR CARTEIRA</h3>
+
+    <!-- OPÇÃO 1: PHANTOM -->
+    <div id="opt-phantom" style="margin-bottom:10px">
+      <button id="btn-phantom-modal" style="width:100%;padding:13px;border:1px solid rgba(171,107,255,.35);border-radius:8px;background:rgba(171,107,255,.07);color:#ab6bff;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;gap:10px;justify-content:center" onclick="connectPhantomModal()">
+        <span style="font-size:18px">⬡</span>
+        <div style="text-align:left">
+          <div>PHANTOM WALLET</div>
+          <div style="font-size:10px;font-weight:400;color:var(--text3);margin-top:1px">Recomendado · Popup de confirmação em cada trade</div>
+        </div>
+      </button>
+      <div id="phantom-status" style="font-size:10px;margin-top:6px;padding:0 4px;min-height:14px;color:var(--text3)"></div>
     </div>
-    <div id="tab-qr-content">
-      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.6">Cole o endereço da carteira do bot. O QR gerado pode ser escaneado para verificar o endereço ou enviar SOL para a carteira do bot.</div>
+
+    <!-- SEPARADOR -->
+    <div style="display:flex;align-items:center;gap:8px;margin:12px 0">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:10px;color:var(--text3)">OU</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <!-- ABAS: KEY / ENDEREÇO -->
+    <div class="wctabs">
+      <button class="wctab active" id="tab-key" onclick="switchTab('key')">🔑 PRIVATE KEY</button>
+      <button class="wctab" id="tab-addr" onclick="switchTab('addr')">👁 SÓ ENDEREÇO</button>
+    </div>
+
+    <div id="tab-key-content">
+      <div class="mwarn">⚠ Use APENAS carteira dedicada ao bot. Nunca sua carteira principal.</div>
+      <input class="min" type="password" id="modal-pkey" placeholder="Array JSON [12,34,...] ou base58">
+    </div>
+
+    <div id="tab-addr-content" style="display:none">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.6">Modo somente leitura — monitora mas não opera.</div>
       <input class="min" type="text" id="wc-addr-in" placeholder="Endereço Solana..." oninput="generateQR()">
       <div id="qr-wrap"></div>
       <div class="qraddr" id="qr-addr-txt" style="display:none"></div>
     </div>
-    <div id="tab-key-content" style="display:none">
-      <div class="mwarn">&#9888; Use APENAS carteira dedicada ao bot. Nunca sua carteira principal.</div>
-      <input class="min" type="password" id="modal-pkey" placeholder="Array JSON [12,34,...] ou base58">
-    </div>
-    <div class="mbtns">
+
+    <div class="mbtns" style="margin-top:12px">
       <button class="mbtn no" onclick="closeWC()">CANCELAR</button>
-      <button class="mbtn ok" onclick="confirmWC()">CONFIRMAR</button>
+      <button class="mbtn ok" id="btn-confirm-modal" onclick="confirmWC()">CONFIRMAR</button>
     </div>
   </div>
 </div>
 
 <script>
-const JUPITER='https://quote-api.jup.ag/v6';
-const DEXSCREENER='https://api.dexscreener.com/latest/dex';
-const RPC='https://api.mainnet-beta.solana.com';
-const SOL_MINT='So11111111111111111111111111111111111111112';
+// ─── GLOBALS ────────────────────────────────────────────────────────────────
+const JUPITER       = 'https://quote-api.jup.ag/v6';
+const DEXSCREENER   = 'https://api.dexscreener.com/latest/dex';
+const RPC_URL       = 'https://api.mainnet-beta.solana.com';
+const SOL_MINT      = 'So11111111111111111111111111111111111111112';
 
-let botRunning=false,wallet=null,privateKey=null;
-let positions={},stats={pnl:0,trades:0,wins:0,analyzed:0,rejected:0,vault:0};
-let opportunities=[],scanInt=null,monInt=null,selIdx=null,aiHistory=[],wcTab='qr';
+// Modos de assinatura: 'phantom' | 'keypair' | 'readonly'
+let signMode      = 'readonly';
+let phantomProv   = null;   // provider Phantom
+let keypair       = null;   // solanaWeb3.Keypair (private key)
+let wallet        = null;   // endereço público string
+let solConn       = null;   // solanaWeb3.Connection
+let solPriceUSD   = 170;
 
-// PHANTOM
-async function connectPhantom(){
-  try{
-    const p=window.solana||window.phantom?.solana;
-    if(!p){addLog('WARN','Phantom não detectado. Use QR/Key.');showWC();return;}
-    await p.connect({onlyIfTrusted:false});
-    wallet=p.publicKey.toString();
-    onWallet('Phantom');
-  }catch(e){addLog('WARN','Phantom: '+e.message);}
-}
-window.addEventListener('load',async()=>{
-  try{
-    const p=window.solana||window.phantom?.solana;
-    if(p?.isConnected&&p.publicKey){wallet=p.publicKey.toString();onWallet('Phantom (auto)');}
-  }catch(e){}
+let botRunning = false;
+let positions  = {}, stats = {pnl:0,trades:0,wins:0,analyzed:0,rejected:0,vault:0};
+let opportunities = [], scanInt = null, monInt = null;
+let selIdx = null, aiHistory = [], wcTab = 'key';
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  // Inicializar conexão Solana via web3.js
+  if (window.solanaWeb3) {
+    solConn = new solanaWeb3.Connection(RPC_URL, 'confirmed');
+    addLog('INFO', 'web3.js carregado. Conexão Solana pronta.');
+  } else {
+    addLog('WARN', 'web3.js não carregou. Transações reais desabilitadas.');
+  }
+  fetchSolPrice();
+  // Auto-reconectar Phantom
+  try {
+    const p = window.solana || window.phantom?.solana;
+    if (p?.isConnected && p.publicKey) {
+      phantomProv = p;
+      wallet = p.publicKey.toString();
+      signMode = 'phantom';
+      onWallet('Phantom (auto)');
+    }
+  } catch(e) {}
 });
-function onWallet(label){
-  document.getElementById('wsec').innerHTML=`<div style="display:flex;align-items:center;gap:8px"><div class="waddr" onclick="copyAddr()" title="Copiar">${label}: ${wallet.slice(0,6)}...${wallet.slice(-4)}</div><button class="btnw red" onclick="disconnectWallet()">DESCONECTAR</button></div>`;
-  document.getElementById('sol-bal').style.display='flex';
-  document.getElementById('vault-chip').style.display='flex';
-  document.getElementById('bot-msg').textContent='Carteira conectada. Pronto para iniciar.';
-  addLog('INFO','Conectado via '+label+': '+wallet.slice(0,12)+'...');
+
+async function fetchSolPrice() {
+  try {
+    const r = await fetch('https://price.jup.ag/v6/price?ids=SOL');
+    const d = await r.json();
+    if (d.data?.SOL?.price) solPriceUSD = d.data.SOL.price;
+  } catch(e) {}
+}
+
+// ─── PHANTOM ─────────────────────────────────────────────────────────────────
+async function connectPhantom() {
+  await connectPhantomModal();
+}
+
+async function connectPhantomModal() {
+  const btn = document.getElementById('btn-phantom-modal');
+  const st  = document.getElementById('phantom-status');
+  const p   = window.solana || window.phantom?.solana;
+
+  if (!p) {
+    st.style.color = 'var(--yellow)';
+    st.innerHTML   = '⚠ Phantom não instalado. <a href="https://phantom.app" target="_blank" style="color:var(--blue)">phantom.app</a>';
+    return;
+  }
+
+  btn.style.opacity = '.6';
+  btn.textContent   = 'Aguardando aprovação no Phantom...';
+  st.style.color    = 'var(--text3)';
+  st.textContent    = 'Verifique a extensão Phantom no seu navegador.';
+
+  try {
+    await p.connect({ onlyIfTrusted: false });
+    phantomProv = p; keypair = null;
+    wallet      = p.publicKey.toString();
+    signMode    = 'phantom';
+    closeWC();
+    onWallet('Phantom');
+  } catch(e) {
+    btn.style.opacity = '1';
+    btn.innerHTML     = '<span style="font-size:18px">⬡</span><div style="text-align:left"><div>PHANTOM WALLET</div><div style="font-size:10px;font-weight:400;color:var(--text3);margin-top:1px">Recomendado · Popup de confirmação em cada trade</div></div>';
+    st.style.color    = 'var(--red)';
+    st.textContent    = 'Conexão recusada: ' + e.message;
+  }
+}
+
+function onWallet(label) {
+  const modeHtml = signMode === 'phantom'
+    ? '<span class="sign-badge phantom">⬡ PHANTOM · ASSINA</span>'
+    : signMode === 'keypair'
+    ? '<span class="sign-badge key">🔑 KEY · ASSINA</span>'
+    : '<span class="sign-badge ro">👁 SOMENTE LEITURA</span>';
+
+  document.getElementById('wsec').innerHTML =
+    `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="waddr" onclick="copyAddr()" title="Copiar endereço">${label}: ${wallet.slice(0,6)}...${wallet.slice(-4)}</div>
+      ${modeHtml}
+      <button class="btnw red" onclick="disconnectWallet()">DESCONECTAR</button>
+    </div>`;
+  document.getElementById('sign-mode').style.display = 'none'; // já no wsec
+  document.getElementById('sol-bal').style.display   = 'flex';
+  document.getElementById('vault-chip').style.display = 'flex';
+
+  const canTrade = (signMode === 'phantom' || signMode === 'keypair');
+  document.getElementById('bot-msg').textContent = canTrade
+    ? 'Carteira conectada. Pronto para operar.'
+    : 'Modo leitura — conecte Phantom ou carregue Private Key para operar.';
+
+  addLog('INFO', `${label} [${signMode.toUpperCase()}]: ${wallet.slice(0,12)}...`);
   fetchBal();
 }
-function disconnectWallet(){
-  wallet=null;privateKey=null;
-  document.getElementById('wsec').innerHTML='<button class="btnw" onclick="connectPhantom()">&#9649; PHANTOM</button><button class="btnw wc" onclick="showWC()" style="margin-left:8px">&#9672; QR / WALLETCONNECT</button>';
-  document.getElementById('sol-bal').style.display='none';
-  document.getElementById('vault-chip').style.display='none';
+
+function disconnectWallet() {
+  if (phantomProv) { try { phantomProv.disconnect(); } catch(e) {} }
+  phantomProv = null; keypair = null; wallet = null; signMode = 'readonly';
+  document.getElementById('wsec').innerHTML =
+    '<button class="btnw" onclick="connectPhantom()">⬡ PHANTOM</button>' +
+    '<button class="btnw wc" onclick="showWC()" style="margin-left:8px">◈ QR / KEY</button>';
+  document.getElementById('sol-bal').style.display    = 'none';
+  document.getElementById('vault-chip').style.display = 'none';
   addLog('INFO','Desconectado.');
 }
-function copyAddr(){if(wallet){navigator.clipboard.writeText(wallet);addLog('INFO','Endereço copiado.');}}
-async function fetchBal(){
-  if(!wallet)return;
-  try{
-    const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[wallet]})});
-    const d=await r.json();
-    document.getElementById('sol-v').textContent=((d.result?.value||0)/1e9).toFixed(4);
-  }catch(e){}
+
+function copyAddr() {
+  if (wallet) { navigator.clipboard.writeText(wallet); addLog('INFO','Endereço copiado.'); }
 }
 
-// MODAL QR
-function showWC(){document.getElementById('modal-wc').classList.add('show');}
-function closeWC(){document.getElementById('modal-wc').classList.remove('show');}
-function switchTab(t){
-  wcTab=t;
-  document.getElementById('tab-qr-content').style.display=t==='qr'?'block':'none';
-  document.getElementById('tab-key-content').style.display=t==='key'?'block':'none';
-  document.getElementById('tab-qr').className='wctab'+(t==='qr'?' active':'');
-  document.getElementById('tab-key').className='wctab'+(t==='key'?' active':'');
+async function fetchBal() {
+  if (!wallet || !solConn) return;
+  try {
+    const pk  = new solanaWeb3.PublicKey(wallet);
+    const bal = await solConn.getBalance(pk);
+    document.getElementById('sol-v').textContent = (bal / 1e9).toFixed(4);
+  } catch(e) { /* RPC rate limit — silencioso */ }
 }
-function generateQR(){
-  const addr=document.getElementById('wc-addr-in').value.trim();
-  const wrap=document.getElementById('qr-wrap');
-  wrap.innerHTML='';
-  if(addr.length<32)return;
-  document.getElementById('qr-addr-txt').style.display='block';
-  document.getElementById('qr-addr-txt').textContent=addr;
-  try{new QRCode(wrap,{text:addr,width:170,height:170,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});}
-  catch(e){wrap.innerHTML='<div style="color:var(--text2);font-size:11px;padding:16px">'+addr.slice(0,24)+'...</div>';}
+
+// ─── MODAL ───────────────────────────────────────────────────────────────────
+function showWC()  { document.getElementById('modal-wc').classList.add('show'); }
+function closeWC() { document.getElementById('modal-wc').classList.remove('show'); }
+
+function switchTab(t) {
+  wcTab = t;
+  document.getElementById('tab-key-content').style.display  = t==='key'  ? 'block' : 'none';
+  document.getElementById('tab-addr-content').style.display = t==='addr' ? 'block' : 'none';
+  document.getElementById('tab-key').className  = 'wctab' + (t==='key'  ? ' active' : '');
+  document.getElementById('tab-addr').className = 'wctab' + (t==='addr' ? ' active' : '');
+  // Confirmar visível só em key/addr, não phantom
+  document.getElementById('btn-confirm-modal').style.display = 'block';
 }
-function confirmWC(){
-  if(wcTab==='qr'){
-    const addr=document.getElementById('wc-addr-in').value.trim();
-    if(addr.length<32){addLog('WARN','Endereço inválido.');return;}
-    wallet=addr;onWallet('Manual/QR');
-  }else{
-    const raw=document.getElementById('modal-pkey').value.trim();
-    if(!raw)return;loadKey(raw);
+
+function generateQR() {
+  const addr = document.getElementById('wc-addr-in').value.trim();
+  const wrap  = document.getElementById('qr-wrap');
+  wrap.innerHTML = '';
+  if (addr.length < 32) return;
+  document.getElementById('qr-addr-txt').style.display = 'block';
+  document.getElementById('qr-addr-txt').textContent   = addr;
+  try {
+    new QRCode(wrap, {text:addr, width:170, height:170,
+      colorDark:'#000', colorLight:'#fff', correctLevel:QRCode.CorrectLevel.M});
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:var(--text2);font-size:11px;padding:16px">${addr}</div>`;
+  }
+}
+
+function confirmWC() {
+  if (wcTab === 'addr') {
+    const addr = document.getElementById('wc-addr-in').value.trim();
+    if (addr.length < 32) { addLog('WARN','Endereço inválido.'); return; }
+    phantomProv = null; keypair = null;
+    wallet = addr; signMode = 'readonly';
+    onWallet('Endereço');
+  } else if (wcTab === 'key') {
+    const raw = document.getElementById('modal-pkey').value.trim();
+    if (!raw) { addLog('WARN','Cole a private key.'); return; }
+    loadKey(raw);
   }
   closeWC();
 }
 
-// KEY
-function saveKey(){const r=document.getElementById('pkey').value.trim();if(r)loadKey(r);}
-function loadKey(raw){
-  try{
-    const bytes=raw.startsWith('[')?new Uint8Array(JSON.parse(raw)):b58d(raw);
-    privateKey=bytes;
-    if(!wallet)wallet='BOT-'+Array.from(bytes.slice(0,4)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    document.getElementById('bot-msg').textContent='Key carregada. Pronto.';
-    document.getElementById('sol-bal').style.display='flex';
-    document.getElementById('vault-chip').style.display='flex';
-    addLog('INFO','Key carregada: '+wallet.slice(0,16)+'...');
-    fetchBal();
-  }catch(e){addLog('WARN','Erro key: '+e.message);}
-}
-function b58d(s){
-  const A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',m={};
-  for(let i=0;i<A.length;i++)m[A[i]]=i;
-  let n=0n;for(const c of s){if(!(c in m))throw new Error('char inválido');n=n*58n+BigInt(m[c]);}
-  const h=n.toString(16).padStart(64,'0'),b=new Uint8Array(h.length/2);
-  for(let i=0;i<b.length;i++)b[i]=parseInt(h.slice(i*2,i*2+2),16);return b;
+// ─── PRIVATE KEY ─────────────────────────────────────────────────────────────
+function saveKey() { const r = document.getElementById('pkey').value.trim(); if (r) loadKey(r); }
+
+function loadKey(raw) {
+  try {
+    if (!window.solanaWeb3) throw new Error('web3.js não carregado');
+    let bytes;
+    if (raw.startsWith('[')) {
+      bytes = Uint8Array.from(JSON.parse(raw));
+    } else {
+      bytes = b58d(raw);
+    }
+    keypair     = solanaWeb3.Keypair.fromSecretKey(bytes);
+    phantomProv = null;
+    wallet      = keypair.publicKey.toString();
+    signMode    = 'keypair';
+    document.getElementById('pkey').value = '';
+    document.getElementById('modal-pkey').value = '';
+    onWallet('Private Key');
+  } catch(e) { addLog('WARN','Erro key: ' + e.message); }
 }
 
-// BOT
-function toggleBot(){
-  if(!wallet&&!privateKey){addLog('WARN','Conecte a carteira primeiro.');showWC();return;}
-  botRunning?stopBot():startBot();
+// base58 decode com suporte a leading zeros
+function b58d(s) {
+  const A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const m = {}; for (let i=0;i<A.length;i++) m[A[i]] = i;
+  let n = 0n;
+  for (const c of s) { if (!(c in m)) throw new Error('char inválido: '+c); n = n*58n + BigInt(m[c]); }
+  const bytes = [];
+  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
+  let lz = 0; for (const c of s) { if (c==='1') lz++; else break; }
+  return new Uint8Array([...new Array(lz).fill(0), ...bytes]);
 }
-function startBot(){
-  botRunning=true;
-  document.getElementById('btn-bot').className='btnbot stop';
-  document.getElementById('btn-bot').textContent='&#9209; PARAR BOT';
-  document.getElementById('sdot').className='sdot on';
-  document.getElementById('stxt').textContent='RODANDO';
+
+// ─── ASSINATURA E ENVIO (CENTRAL) ────────────────────────────────────────────
+// Recebe swapTransaction em base64 do Jupiter, deserializa, assina e envia.
+// Suporta Phantom (signAndSendTransaction) e Keypair (sign local + sendRawTransaction).
+async function signAndSend(swapTxBase64) {
+  if (!solConn) throw new Error('web3.js não disponível');
+
+  const txBytes = Uint8Array.from(atob(swapTxBase64), c => c.charCodeAt(0));
+
+  if (signMode === 'phantom') {
+    // --- PHANTOM ---
+    // Deserializar como VersionedTransaction (Jupiter v6 usa versioned tx)
+    let tx;
+    try {
+      tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
+    } catch(e) {
+      tx = solanaWeb3.Transaction.from(txBytes);
+    }
+    // Phantom assina e envia internamente
+    const result = await phantomProv.signAndSendTransaction(tx, {
+      skipPreflight: true,
+      maxRetries: 3
+    });
+    return result.signature || result;
+
+  } else if (signMode === 'keypair') {
+    // --- KEYPAIR LOCAL ---
+    let tx;
+    let isVersioned = false;
+    try {
+      tx = solanaWeb3.VersionedTransaction.deserialize(txBytes);
+      isVersioned = true;
+    } catch(e) {
+      tx = solanaWeb3.Transaction.from(txBytes);
+    }
+
+    if (isVersioned) {
+      tx.sign([keypair]);
+      const sig = await solConn.sendRawTransaction(tx.serialize(), {
+        skipPreflight: true, maxRetries: 3
+      });
+      return sig;
+    } else {
+      // Legacy transaction
+      const { blockhash } = await solConn.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = keypair.publicKey;
+      tx.sign(keypair);
+      const sig = await solConn.sendRawTransaction(tx.serialize(), {
+        skipPreflight: true, maxRetries: 3
+      });
+      return sig;
+    }
+  } else {
+    throw new Error('Modo somente leitura — conecte Phantom ou Private Key');
+  }
+}
+
+// ─── BOT ─────────────────────────────────────────────────────────────────────
+function toggleBot() {
+  if (!wallet) { addLog('WARN','Conecte a carteira primeiro.'); showWC(); return; }
+  if (signMode === 'readonly') {
+    addLog('WARN','Modo leitura — não é possível operar. Conecte Phantom ou carregue uma Private Key.');
+    return;
+  }
+  botRunning ? stopBot() : startBot();
+}
+
+function startBot() {
+  botRunning = true;
+  const btn = document.getElementById('btn-bot');
+  btn.className   = 'btnbot stop';
+  btn.textContent = '⏹ PARAR BOT';
+  document.getElementById('sdot').className  = 'sdot on';
+  document.getElementById('stxt').textContent = 'RODANDO';
   addLog('INFO','Bot iniciado. Escaneando Solana...');
   aiAuto('Bot iniciado! Vou monitorar o mercado e buscar as melhores oportunidades de scalp.');
   runScan();
-  scanInt=setInterval(runScan,40000);
-  monInt=setInterval(monitorPos,8000);
+  scanInt = setInterval(runScan,   40000);
+  monInt  = setInterval(monitorPos, 8000);
 }
-function stopBot(){
-  botRunning=false;clearInterval(scanInt);clearInterval(monInt);
-  document.getElementById('btn-bot').className='btnbot go';
-  document.getElementById('btn-bot').textContent='&#9654; INICIAR BOT';
-  document.getElementById('sdot').className='sdot';
-  document.getElementById('stxt').textContent='OFFLINE';
+
+function stopBot() {
+  botRunning = false; clearInterval(scanInt); clearInterval(monInt);
+  const btn = document.getElementById('btn-bot');
+  btn.className   = 'btnbot go';
+  btn.textContent = '▶ INICIAR BOT';
+  document.getElementById('sdot').className   = 'sdot';
+  document.getElementById('stxt').textContent = 'OFFLINE';
   addLog('INFO','Bot parado.');
 }
 
-// SCAN
-async function runScan(){
-  if(!botRunning)return;
-  document.getElementById('scan-st').textContent='&#8635; ESCANEANDO...';
-  try{
-    const r=await fetch(`${DEXSCREENER}/search?q=solana`);
-    const d=await r.json();
-    processTokens((d.pairs||[]).filter(p=>p.chainId==='solana'));
-  }catch(e){addLog('WARN','API limitada, usando demo.');demoScan();}
+// ─── SCAN ────────────────────────────────────────────────────────────────────
+async function runScan() {
+  if (!botRunning) return;
+  document.getElementById('scan-st').textContent = '↻ ESCANEANDO...';
+  try {
+    const r = await fetch(`${DEXSCREENER}/search?q=solana`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    processTokens((d.pairs||[]).filter(p => p.chainId === 'solana'));
+  } catch(e) { addLog('WARN','API limitada, usando demo.'); demoScan(); }
 }
-function processTokens(pairs){
-  opportunities=[];let rej=0;stats.analyzed+=pairs.length;
-  for(const p of pairs.slice(0,80)){
-    const a=analyzeToken(p);
-    if(a.blocked||a.score<parseInt(document.getElementById('p-score').value)){rej++;stats.rejected++;}
-    else opportunities.push({pair:p,analysis:a});
+
+function processTokens(pairs) {
+  opportunities = []; let rej = 0; stats.analyzed += pairs.length;
+  const scoreMin = parseInt(document.getElementById('p-score').value);
+  for (const p of pairs.slice(0,80)) {
+    const a = analyzeToken(p);
+    if (a.blocked || a.score < scoreMin) { rej++; stats.rejected++; }
+    else opportunities.push({pair:p, analysis:a});
   }
-  opportunities.sort((a,b)=>b.analysis.score-a.analysis.score);
-  updateStats();renderOpps();
-  const maxPos=parseInt(document.getElementById('p-maxpos').value);
-  if(Object.keys(positions).length<maxPos&&opportunities.length>0)executeBuy(opportunities[0].pair,opportunities[0].analysis);
-  document.getElementById('scan-st').textContent=`&#10003; ${opportunities.length} aprovados · ${rej} rejeitados`;
-  if(opportunities.length>0&&Math.random()>.65){
-    const b=opportunities[0];
+  opportunities.sort((a,b) => b.analysis.score - a.analysis.score);
+  updateStats(); renderOpps();
+  const maxPos = parseInt(document.getElementById('p-maxpos').value);
+  if (Object.keys(positions).length < maxPos && opportunities.length > 0) {
+    executeBuy(opportunities[0].pair, opportunities[0].analysis);
+  }
+  document.getElementById('scan-st').textContent =
+    `✓ ${opportunities.length} aprovados · ${rej} rejeitados`;
+  if (opportunities.length > 0 && Math.random() > .65) {
+    const b = opportunities[0];
     aiAuto(`Scan completo. ${opportunities.length} oportunidades. Melhor: ${b.pair.baseToken?.symbol} score ${b.analysis.score}. ${b.analysis.signals.slice(0,2).join(', ')}.`);
   }
 }
 
-// ANÁLISE
-function analyzeToken(pair){
-  let score=100,risks=[],signals=[],blocked=false;
-  const vol24=parseFloat(pair.volume?.h24||0);
-  const liq=parseFloat(pair.liquidity?.usd||0);
-  const c5=parseFloat(pair.priceChange?.m5||0);
-  const c1=parseFloat(pair.priceChange?.h1||0);
-  const c24=parseFloat(pair.priceChange?.h24||0);
-  const buys=pair.txns?.h1?.buys||0,sells=pair.txns?.h1?.sells||0;
-  const total=buys+sells||1,sellR=sells/total;
-  const age=pair.pairCreatedAt?(Date.now()-pair.pairCreatedAt)/60000:9999;
-  const base={score:0,risks,signals,blocked,sellR:sellR.toFixed(2),rsi:50,vol24,liq,c5,c1,age};
-  if(liq<parseInt(document.getElementById('p-liq').value))return{...base,blocked:true,risks:['Liquidez insuficiente']};
-  if(age<parseInt(document.getElementById('p-age').value))return{...base,blocked:true,risks:[`Pool nova (${age.toFixed(0)}min)`]};
-  if(c24>300&&c1<0)return{...base,blocked:true,risks:['Padrão P&D detectado']};
-  if(c5<-15)return{...base,blocked:true,risks:['Dump ativo']};
-  if(sellR>0.8&&total>10)return{...base,blocked:true,risks:['Sell pressure extrema']};
-  if(vol24<5000){score-=20;risks.push('Volume baixo');}
-  if(c5<-8){score-=15;risks.push('Candle de rug');}
-  if(c1<-20){score-=20;risks.push('Queda forte 1h');}
-  if(c24<-40){score-=15;risks.push('Declínio prolongado');}
-  if(sellR>0.65){score-=15;risks.push('Mais vendas que compras');}
-  if(vol24>liq*10){score-=20;risks.push('Volume artificial');}
-  if(c5>2&&c1>5){score+=12;signals.push('Momentum forte');}
-  const mom=c5*.3+c1*.5+c24*.2;
-  if(mom>5){score+=8;signals.push('Tendência saudável');}
-  if(vol24>100000){score+=5;signals.push('Volume alto');}
-  if(vol24>500000){score+=5;signals.push('Volume muito alto');}
-  if(liq>50000){score+=5;signals.push('Boa liquidez');}
-  if(liq>200000){score+=5;signals.push('Liquidez excelente');}
-  if(sellR<0.4){score+=10;signals.push('Compras dominam');}
-  if(c5>0&&c1>0){score+=5;signals.push('EMA9 > EMA21');}
-  const rsi=Math.max(10,Math.min(90,50+mom*.5));
-  const rMin=parseInt(document.getElementById('p-rsimin').value),rMax=parseInt(document.getElementById('p-rsimax').value);
-  if(rsi>=rMin&&rsi<=rMax){score+=8;signals.push(`RSI ${rsi.toFixed(0)} ideal`);}
-  else if(rsi>rMax){score-=10;risks.push(`RSI ${rsi.toFixed(0)} sobrecomprado`);}
-  else{score-=5;risks.push(`RSI ${rsi.toFixed(0)} fraco`);}
-  const rr=parseFloat(document.getElementById('p-tp').value)/parseFloat(document.getElementById('p-sl').value);
-  if(rr>=2){score+=5;signals.push(`R:R ${rr.toFixed(1)}`);}
-  return{score:Math.round(Math.max(0,Math.min(100,score))),risks,signals,blocked,sellR:sellR.toFixed(2),rsi:rsi.toFixed(0),vol24,liq,c5,c1,age};
+// ─── ANÁLISE ─────────────────────────────────────────────────────────────────
+function analyzeToken(pair) {
+  let score=100, risks=[], signals=[], blocked=false;
+  const vol24  = parseFloat(pair.volume?.h24 || 0);
+  const liq    = parseFloat(pair.liquidity?.usd || 0);
+  const c5     = parseFloat(pair.priceChange?.m5  || 0);
+  const c1     = parseFloat(pair.priceChange?.h1  || 0);
+  const c24    = parseFloat(pair.priceChange?.h24 || 0);
+  const buys   = pair.txns?.h1?.buys  || 0;
+  const sells  = pair.txns?.h1?.sells || 0;
+  const total  = buys + sells || 1, sellR = sells / total;
+  const age    = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / 60000 : 9999;
+  const base   = {score:0,risks,signals,blocked,sellR:sellR.toFixed(2),rsi:50,vol24,liq,c5,c1,age};
+
+  if (liq  < parseInt(document.getElementById('p-liq').value))  return {...base,blocked:true,risks:['Liquidez insuficiente']};
+  if (age  < parseInt(document.getElementById('p-age').value))  return {...base,blocked:true,risks:[`Pool nova (${age.toFixed(0)}min)`]};
+  if (c24 > 300 && c1 < 0)  return {...base,blocked:true,risks:['Padrão P&D detectado']};
+  if (c5  < -15)             return {...base,blocked:true,risks:['Dump ativo']};
+  if (sellR > 0.8 && total > 10) return {...base,blocked:true,risks:['Sell pressure extrema']};
+
+  if (vol24  < 5000)            { score -= 20; risks.push('Volume baixo'); }
+  if (c5     < -8)              { score -= 15; risks.push('Candle de rug'); }
+  if (c1     < -20)             { score -= 20; risks.push('Queda forte 1h'); }
+  if (c24    < -40)             { score -= 15; risks.push('Declínio prolongado'); }
+  if (sellR  > 0.65)            { score -= 15; risks.push('Mais vendas que compras'); }
+  if (vol24  > liq * 10)        { score -= 20; risks.push('Volume artificial'); }
+  if (c5 > 2 && c1 > 5)        { score += 12; signals.push('Momentum forte'); }
+  const mom = c5*.3 + c1*.5 + c24*.2;
+  if (mom > 5)                  { score +=  8; signals.push('Tendência saudável'); }
+  if (vol24 > 100000)           { score +=  5; signals.push('Volume alto'); }
+  if (vol24 > 500000)           { score +=  5; signals.push('Volume muito alto'); }
+  if (liq   > 50000)            { score +=  5; signals.push('Boa liquidez'); }
+  if (liq   > 200000)           { score +=  5; signals.push('Liquidez excelente'); }
+  if (sellR < 0.4)              { score += 10; signals.push('Compras dominam'); }
+  if (c5 > 0 && c1 > 0)        { score +=  5; signals.push('EMA9 > EMA21'); }
+  const rsi  = Math.max(10, Math.min(90, 50 + mom * .5));
+  const rMin = parseInt(document.getElementById('p-rsimin').value);
+  const rMax = parseInt(document.getElementById('p-rsimax').value);
+  if (rsi >= rMin && rsi <= rMax) { score +=  8; signals.push(`RSI ${rsi.toFixed(0)} ideal`); }
+  else if (rsi > rMax)            { score -= 10; risks.push(`RSI ${rsi.toFixed(0)} sobrecomprado`); }
+  else                            { score -=  5; risks.push(`RSI ${rsi.toFixed(0)} fraco`); }
+  const rr = parseFloat(document.getElementById('p-tp').value) / parseFloat(document.getElementById('p-sl').value);
+  if (rr >= 2) { score += 5; signals.push(`R:R ${rr.toFixed(1)}`); }
+
+  return {
+    score:    Math.round(Math.max(0, Math.min(100, score))),
+    risks, signals, blocked,
+    sellR:    sellR.toFixed(2),
+    rsi:      rsi.toFixed(0),
+    vol24, liq, c5, c1, age
+  };
 }
 
-// RENDER OPPS
-function renderOpps(){
-  const list=document.getElementById('opp-list');
-  if(!opportunities.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3)">Nenhuma oportunidade. Próximo scan em 40s...</div>';return;}
-  list.innerHTML=opportunities.slice(0,25).map((o,i)=>{
-    const p=o.pair,a=o.analysis;
-    const sym=p.baseToken?.symbol||'???';
-    const px=parseFloat(p.priceUsd||0).toFixed(8);
-    const c5=parseFloat(p.priceChange?.m5||0).toFixed(1);
-    const sc=a.score>=80?'h':a.score>=60?'m':'l';
-    const rk=a.risks.length===0?'s':a.risks.length<=2?'w':'d';
-    const rkl=a.risks.length===0?'SEGURO':a.risks.length<=2?'ATENÇÃO':'RISCO';
+// ─── RENDER OPPS ─────────────────────────────────────────────────────────────
+function renderOpps() {
+  const list = document.getElementById('opp-list');
+  if (!opportunities.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Nenhuma oportunidade. Próximo scan em 40s...</div>';
+    return;
+  }
+  list.innerHTML = opportunities.slice(0,25).map((o,i) => {
+    const p = o.pair, a = o.analysis;
+    const sym  = (p.baseToken?.symbol||'???').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const px   = parseFloat(p.priceUsd||0).toFixed(8);
+    const c5   = parseFloat(p.priceChange?.m5||0).toFixed(1);
+    const sc   = a.score>=80?'h':a.score>=60?'m':'l';
+    const rk   = a.risks.length===0?'s':a.risks.length<=2?'w':'d';
+    const rkl  = a.risks.length===0?'SEGURO':a.risks.length<=2?'ATENÇÃO':'RISCO';
     return `<div class="opp-item${selIdx===i?' sel':''}" onclick="selOpp(${i})">
-      <div class="oh"><div class="oname">${sym} <span class="rtag ${rk}">${rkl}</span></div><div class="oscore ${sc}">Score ${a.score}</div></div>
+      <div class="oh">
+        <div class="oname">${sym} <span class="rtag ${rk}">${rkl}</span></div>
+        <div class="oscore ${sc}">Score ${a.score}</div>
+      </div>
       <div class="ometa">
         <div class="omi">$<span>${px}</span></div>
-        <div class="omi">5m:<span style="color:${c5>=0?'var(--green)':'var(--red)'}">${c5}%</span></div>
+        <div class="omi">5m:<span style="color:${parseFloat(c5)>=0?'var(--green)':'var(--red)'}">${c5}%</span></div>
         <div class="omi">Vol:<span>$${fmt(a.vol24)}</span></div>
         <div class="omi">Liq:<span>$${fmt(a.liq)}</span></div>
         <div class="omi">RSI:<span>${a.rsi}</span></div>
@@ -534,259 +762,355 @@ function renderOpps(){
     </div>`;
   }).join('');
 }
-function selOpp(i){
-  selIdx=i;const o=opportunities[i];if(!o)return;
-  const p=o.pair,a=o.analysis;
-  const sym=p.baseToken?.symbol||'???';
-  const px=parseFloat(p.priceUsd||0).toFixed(8);
-  const c1=parseFloat(p.priceChange?.h1||0).toFixed(1);
-  document.getElementById('ctok').textContent=sym+'/SOL';
-  document.getElementById('cpx').textContent='$'+px;
-  document.getElementById('cch').textContent=(c1>=0?'+':'')+c1+'% 1h';
-  document.getElementById('cch').className='cch '+(c1>=0?'pos':'neg');
-  const rsi=parseInt(a.rsi);
-  document.getElementById('cinds').innerHTML=`
-    <div class="ind ${rsi>=60?'bull':rsi<=40?'bear':'neu'}">RSI ${a.rsi}</div>
-    <div class="ind ${a.signals.includes('EMA9 > EMA21')?'bull':'neu'}">EMA</div>
-    <div class="ind ${parseFloat(a.sellR)<.5?'bull':'bear'}">B/S ${Math.round((1-parseFloat(a.sellR))*100)}/${Math.round(parseFloat(a.sellR)*100)}</div>
-    <div class="ind ${a.score>=70?'bull':'bear'}">Score ${a.score}</div>`;
-  drawChart(p);renderOpps();
+
+function selOpp(i) {
+  selIdx = i; const o = opportunities[i]; if (!o) return;
+  const p = o.pair, a = o.analysis;
+  const sym = p.baseToken?.symbol || '???';
+  const px  = parseFloat(p.priceUsd||0).toFixed(8);
+  const c1  = parseFloat(p.priceChange?.h1||0).toFixed(1);
+  document.getElementById('ctok').textContent = sym + '/SOL';
+  document.getElementById('cpx').textContent  = '$' + px;
+  document.getElementById('cch').textContent  = (parseFloat(c1)>=0?'+':'') + c1 + '% 1h';
+  document.getElementById('cch').className    = 'cch ' + (parseFloat(c1)>=0?'pos':'neg');
+  const rsi = parseInt(a.rsi);
+  document.getElementById('cinds').innerHTML =
+    `<div class="ind ${rsi>=60?'bull':rsi<=40?'bear':'neu'}">RSI ${a.rsi}</div>
+     <div class="ind ${a.signals.includes('EMA9 > EMA21')?'bull':'neu'}">EMA</div>
+     <div class="ind ${parseFloat(a.sellR)<.5?'bull':'bear'}">B/S ${Math.round((1-parseFloat(a.sellR))*100)}/${Math.round(parseFloat(a.sellR)*100)}</div>
+     <div class="ind ${a.score>=70?'bull':'bear'}">Score ${a.score}</div>`;
+  drawChart(p); renderOpps();
 }
 
-// CHART
-function drawChart(pair){
-  const canvas=document.getElementById('chart-canvas');
-  const ctx=canvas.getContext('2d');
-  canvas.width=canvas.offsetWidth||580;canvas.height=150;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const price=parseFloat(pair.priceUsd||.001);
-  const c24=parseFloat(pair.priceChange?.h24||0)/100;
-  const steps=48;const candles=[];let p=price/(1+c24);
-  for(let i=0;i<steps;i++){
-    const n=(Math.random()-.47)*.04,t=c24/steps;
-    const open=p,close=p*(1+n+t);
-    candles.push({open,close,high:Math.max(open,close)*(1+Math.random()*.018),low:Math.min(open,close)*(1-Math.random()*.013)});
-    p=close;
+// ─── CHART ───────────────────────────────────────────────────────────────────
+function drawChart(pair) {
+  const canvas = document.getElementById('chart-canvas');
+  const ctx    = canvas.getContext('2d');
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.offsetWidth || 580;
+  const H      = 150;
+  canvas.width  = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const price = parseFloat(pair.priceUsd || .001);
+  const c24   = parseFloat(pair.priceChange?.h24 || 0) / 100;
+  const steps = 48; const candles = []; let p = price / (1 + c24 || 1);
+  for (let i=0; i<steps; i++) {
+    const n = (Math.random() - .47) * .04, t = c24 / steps;
+    const open = p, close = p * (1 + n + t);
+    candles.push({open,close,
+      high: Math.max(open,close) * (1 + Math.random() * .018),
+      low:  Math.min(open,close) * (1 - Math.random() * .013)});
+    p = close;
   }
-  const hs=candles.map(c=>c.high),ls=candles.map(c=>c.low);
-  const minP=Math.min(...ls),maxP=Math.max(...hs),range=maxP-minP||1;
-  const W=canvas.width,H=canvas.height,pad={t:8,b:18,l:6,r:56};
-  const cW=(W-pad.l-pad.r)/steps;
-  ctx.strokeStyle='#ffffff06';ctx.lineWidth=1;
-  for(let i=0;i<4;i++){
-    const y=pad.t+(H-pad.t-pad.b)*i/3;
-    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
-    ctx.fillStyle='#454860';ctx.font='10px monospace';ctx.textAlign='right';
-    ctx.fillText(fmtPx(maxP-(maxP-minP)*i/3),W-2,y+3);
+  const hs = candles.map(c=>c.high), ls = candles.map(c=>c.low);
+  const minP = Math.min(...ls), maxP = Math.max(...hs), range = maxP - minP || 1;
+  const pad  = {t:8, b:18, l:6, r:56};
+  const cW   = (W - pad.l - pad.r) / steps;
+  ctx.strokeStyle = '#ffffff06'; ctx.lineWidth = 1;
+  for (let i=0; i<4; i++) {
+    const y = pad.t + (H - pad.t - pad.b) * i / 3;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#454860'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+    ctx.fillText(fmtPx(maxP - (maxP-minP)*i/3), W-2, y+3);
   }
-  let ema=candles[0].close;const eL=[];
-  candles.forEach((c,i)=>{
-    ema=ema*.8+c.close*.2;eL.push(ema);
-    const x=pad.l+i*cW,bull=c.close>=c.open,col=bull?'#00e676':'#ff3d57';
-    const yO=pad.t+(maxP-c.open)/range*(H-pad.t-pad.b);
-    const yC=pad.t+(maxP-c.close)/range*(H-pad.t-pad.b);
-    const yH=pad.t+(maxP-c.high)/range*(H-pad.t-pad.b);
-    const yL=pad.t+(maxP-c.low)/range*(H-pad.t-pad.b);
-    ctx.strokeStyle=col;ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(x+cW/2,yH);ctx.lineTo(x+cW/2,yL);ctx.stroke();
-    ctx.fillStyle=bull?'#00e67622':'#ff3d5722';ctx.strokeStyle=col;ctx.lineWidth=.8;
-    ctx.beginPath();ctx.rect(x+.5,Math.min(yO,yC),cW-1,Math.abs(yC-yO)||1);ctx.fill();ctx.stroke();
+  let ema = candles[0].close; const eL = [];
+  candles.forEach((c,i) => {
+    ema = ema * .8 + c.close * .2; eL.push(ema);
+    const x = pad.l + i*cW, bull = c.close >= c.open, col = bull ? '#00e676' : '#ff3d57';
+    const yO = pad.t + (maxP-c.open)  / range * (H-pad.t-pad.b);
+    const yC = pad.t + (maxP-c.close) / range * (H-pad.t-pad.b);
+    const yH = pad.t + (maxP-c.high)  / range * (H-pad.t-pad.b);
+    const yL = pad.t + (maxP-c.low)   / range * (H-pad.t-pad.b);
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x+cW/2, yH); ctx.lineTo(x+cW/2, yL); ctx.stroke();
+    ctx.fillStyle = bull ? '#00e67622' : '#ff3d5722';
+    ctx.strokeStyle = col; ctx.lineWidth = .8;
+    ctx.beginPath(); ctx.rect(x+.5, Math.min(yO,yC), cW-1, Math.abs(yC-yO)||1);
+    ctx.fill(); ctx.stroke();
   });
-  ctx.strokeStyle='#448aff88';ctx.lineWidth=1.5;ctx.beginPath();
-  eL.forEach((e,i)=>{const x=pad.l+i*cW+cW/2,y=pad.t+(maxP-e)/range*(H-pad.t-pad.b);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.strokeStyle = '#448aff88'; ctx.lineWidth = 1.5; ctx.beginPath();
+  eL.forEach((e,i) => {
+    const x = pad.l + i*cW + cW/2, y = pad.t + (maxP-e)/range*(H-pad.t-pad.b);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
   ctx.stroke();
-  const lY=pad.t+(maxP-price)/range*(H-pad.t-pad.b);
-  ctx.strokeStyle='#ffc10744';ctx.lineWidth=1;ctx.setLineDash([4,4]);
-  ctx.beginPath();ctx.moveTo(pad.l,lY);ctx.lineTo(W-pad.r,lY);ctx.stroke();ctx.setLineDash([]);
+  const lY = pad.t + (maxP-price)/range*(H-pad.t-pad.b);
+  ctx.strokeStyle = '#ffc10744'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(pad.l, lY); ctx.lineTo(W-pad.r, lY); ctx.stroke();
+  ctx.setLineDash([]);
 }
 
-// BUY
-async function executeBuy(pair,analysis){
-  if(positions[pair.pairAddress])return;
-  const tokenOut=pair.baseToken?.address;
-  if(!tokenOut||tokenOut===SOL_MINT)return;
-  const sol=parseFloat(document.getElementById('p-size').value);
-  const lamports=Math.floor(sol*1e9);
-  const slip=parseFloat(document.getElementById('p-slip').value)*100;
-  addLog('BUY',`Buscando rota: ${pair.baseToken.symbol} | Score ${analysis.score}`);
-  try{
-    const qr=await fetch(`${JUPITER}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${lamports}&slippageBps=${slip}`);
-    const quote=await qr.json();
-    if(quote.error){addLog('WARN','Quote: '+quote.error);return;}
-    const sqr=await fetch(`${JUPITER}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slip*3}`);
-    const sq=await sqr.json();
-    if(!sq.outAmount){addLog('WARN',`HONEYPOT: ${pair.baseToken.symbol}`);return;}
-    const impact=1-(parseInt(sq.outAmount)/lamports);
-    if(impact>.3){addLog('WARN',`Impacto venda ${(impact*100).toFixed(0)}% - suspeito: ${pair.baseToken.symbol}`);return;}
-    const sr=await fetch(`${JUPITER}/swap`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({quoteResponse:quote,userPublicKey:wallet,wrapAndUnwrapSol:true,skipUserAccountRpcCalls:true,prioritizationFeeLamports:5000})});
-    const sd=await sr.json();
-    if(!sd.swapTransaction){addLog('WARN','Sem swap tx.');return;}
-    const send=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'sendTransaction',params:[sd.swapTransaction,{skipPreflight:true,maxRetries:3,encoding:'base64'}]})});
-    const res=await send.json();const sig=res.result;
-    if(!sig){addLog('WARN','TX não enviada.');return;}
-    const entry=parseFloat(pair.priceUsd||0);
-    positions[pair.pairAddress]={symbol:pair.baseToken.symbol,address:tokenOut,pairAddress:pair.pairAddress,
-      entryPrice:entry,currentPrice:entry,highestPrice:entry,amountSOL:sol,amountToken:parseInt(quote.outAmount),signature:sig,entryTime:Date.now()};
+// ─── BUY ─────────────────────────────────────────────────────────────────────
+async function executeBuy(pair, analysis) {
+  if (positions[pair.pairAddress]) return;
+  const tokenOut = pair.baseToken?.address;
+  if (!tokenOut || tokenOut === SOL_MINT) return;
+  const sol      = parseFloat(document.getElementById('p-size').value);
+  const lamports = Math.floor(sol * 1e9);
+  const slip     = parseFloat(document.getElementById('p-slip').value) * 100;
+  addLog('BUY', `Buscando rota: ${pair.baseToken.symbol} | Score ${analysis.score}`);
+  try {
+    // 1. Quote
+    const qr    = await fetch(`${JUPITER}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${lamports}&slippageBps=${slip}`);
+    const quote = await qr.json();
+    if (quote.error) { addLog('WARN','Quote: '+quote.error); return; }
+
+    // 2. Honeypot check (simula venda reversa)
+    const sqr = await fetch(`${JUPITER}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slip*3}`);
+    const sq  = await sqr.json();
+    if (!sq.outAmount) { addLog('WARN',`HONEYPOT: ${pair.baseToken.symbol}`); return; }
+    const impact = 1 - (parseInt(sq.outAmount) / lamports);
+    if (impact > .3) { addLog('WARN',`Impacto ${(impact*100).toFixed(0)}% suspeito: ${pair.baseToken.symbol}`); return; }
+
+    // 3. Obter swap transaction do Jupiter
+    const sr = await fetch(`${JUPITER}/swap`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        quoteResponse:            quote,
+        userPublicKey:            wallet,
+        wrapAndUnwrapSol:         true,
+        skipUserAccountRpcCalls:  true,
+        prioritizationFeeLamports: 5000
+      })
+    });
+    const sd = await sr.json();
+    if (!sd.swapTransaction) { addLog('WARN','Sem swap tx: '+(sd.error||'erro Jupiter')); return; }
+
+    // 4. Assinar e enviar (Phantom ou Keypair)
+    const sig = await signAndSend(sd.swapTransaction);
+    if (!sig) { addLog('WARN','TX não enviada.'); return; }
+
+    const entry = parseFloat(pair.priceUsd || 0);
+    positions[pair.pairAddress] = {
+      symbol:     pair.baseToken.symbol,
+      address:    tokenOut,
+      pairAddress: pair.pairAddress,
+      entryPrice:  entry,
+      currentPrice: entry,
+      highestPrice: entry,
+      amountSOL:   sol,
+      amountToken: parseInt(quote.outAmount),
+      signature:   sig,
+      entryTime:   Date.now()
+    };
     stats.trades++;
-    addLog('BUY',`COMPRADO ${pair.baseToken.symbol} @ $${entry.toExponential(3)} TX:${sig.slice(0,14)}...`);
-    aiAuto(`Comprei ${pair.baseToken.symbol} a $${entry.toExponential(3)}. TP em ${document.getElementById('p-tp').value}%, SL em ${document.getElementById('p-sl').value}%. Aguardando alvo.`);
-    updateStats();renderPos();fetchBal();
-  }catch(e){addLog('WARN','Erro swap: '+e.message);}
+    addLog('BUY', `COMPRADO ${pair.baseToken.symbol} @ $${entry.toExponential(3)} TX:${sig.slice(0,14)}...`);
+    aiAuto(`Comprei ${pair.baseToken.symbol} a $${entry.toExponential(3)}. TP ${document.getElementById('p-tp').value}%, SL ${document.getElementById('p-sl').value}%. Aguardando alvo.`);
+    updateStats(); renderPos(); fetchBal();
+  } catch(e) { addLog('WARN','Erro buy: '+e.message); }
 }
 
-// MONITOR
-async function monitorPos(){
-  if(!botRunning)return;
-  for(const pa in positions){
-    const pos=positions[pa];
-    try{
-      const r=await fetch(`${DEXSCREENER}/pairs/solana/${pa}`);
-      const d=await r.json();const pair=d.pair||d.pairs?.[0];if(!pair)continue;
-      const cur=parseFloat(pair.priceUsd||pos.entryPrice);
-      pos.currentPrice=cur;if(cur>pos.highestPrice)pos.highestPrice=cur;
-      const pnl=(cur-pos.entryPrice)/pos.entryPrice*100;
-      const tp=parseFloat(document.getElementById('p-tp').value);
-      const sl=parseFloat(document.getElementById('p-sl').value);
-      const trail=parseFloat(document.getElementById('p-trail').value);
-      const tDrop=(pos.highestPrice-cur)/pos.highestPrice*100;
-      const c5=parseFloat(pair.priceChange?.m5||0);
-      if(c5<-12){addLog('WARN',`DUMP ${pos.symbol}! Saída emergencial.`);await executeSell(pos,pair,'DUMP_EMERGENCY');continue;}
-      if(pnl<=-sl)await executeSell(pos,pair,'STOP_LOSS');
-      else if(pnl>=tp)await executeSell(pos,pair,'TAKE_PROFIT');
-      else if(tDrop>=trail&&pnl>3)await executeSell(pos,pair,'TRAILING_STOP');
-    }catch(e){}
+// ─── MONITOR ─────────────────────────────────────────────────────────────────
+async function monitorPos() {
+  if (!botRunning) return;
+  const pairAddrs = Object.keys(positions);
+  for (const pa of pairAddrs) {
+    const pos = positions[pa]; if (!pos) continue;
+    try {
+      const r = await fetch(`${DEXSCREENER}/pairs/solana/${pa}`);
+      if (!r.ok) continue;
+      const d = await r.json(); const pair = d.pair || d.pairs?.[0]; if (!pair) continue;
+      const cur = parseFloat(pair.priceUsd || pos.entryPrice);
+      pos.currentPrice = cur; if (cur > pos.highestPrice) pos.highestPrice = cur;
+      const pnl   = (cur - pos.entryPrice) / pos.entryPrice * 100;
+      const tp    = parseFloat(document.getElementById('p-tp').value);
+      const sl    = parseFloat(document.getElementById('p-sl').value);
+      const trail = parseFloat(document.getElementById('p-trail').value);
+      const tDrop = (pos.highestPrice - cur) / pos.highestPrice * 100;
+      const c5    = parseFloat(pair.priceChange?.m5 || 0);
+      if (c5 < -12) { addLog('WARN',`DUMP ${pos.symbol}! Saída emergencial.`); await executeSell(pos, pair, 'DUMP_EMERGENCY'); continue; }
+      if (pnl <= -sl)             await executeSell(pos, pair, 'STOP_LOSS');
+      else if (pnl >= tp)         await executeSell(pos, pair, 'TAKE_PROFIT');
+      else if (tDrop >= trail && pnl > 3) await executeSell(pos, pair, 'TRAILING_STOP');
+    } catch(e) { /* silencioso */ }
   }
   renderPos();
 }
-async function executeSell(pos,pair,reason){
-  const pnlPct=(pos.currentPrice-pos.entryPrice)/pos.entryPrice*100;
-  const pnlUSD=pos.amountSOL*(pnlPct/100);
-  try{
-    const slip=parseFloat(document.getElementById('p-slip').value)*200;
-    const qr=await fetch(`${JUPITER}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slip}`);
-    const quote=await qr.json();if(quote.error)throw new Error(quote.error);
-    const sr=await fetch(`${JUPITER}/swap`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({quoteResponse:quote,userPublicKey:wallet,wrapAndUnwrapSol:true,skipUserAccountRpcCalls:true,prioritizationFeeLamports:5000})});
-    const sd=await sr.json();
-    await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({jsonrpc:'2.0',id:1,method:'sendTransaction',params:[sd.swapTransaction,{skipPreflight:true,maxRetries:3,encoding:'base64'}]})});
-    const vp=parseFloat(document.getElementById('p-vault').value);
-    if(pnlUSD>0)stats.vault+=pnlUSD*(vp/100);
-    stats.pnl+=pnlUSD;if(pnlUSD>0)stats.wins++;
-    const em=reason==='TAKE_PROFIT'?'TAKE PROFIT':reason==='TRAILING_STOP'?'TRAILING':reason==='DUMP_EMERGENCY'?'EMERGÊNCIA':'STOP LOSS';
-    addLog('SELL',`${pos.symbol} [${em}] ${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%`,pnlUSD);
-    if(pnlUSD>0)aiAuto(`Vendi ${pos.symbol} com +${pnlPct.toFixed(2)}% de lucro. ${vp}% guardado no cofre. Buscando próxima oportunidade.`);
-    else aiAuto(`Stop em ${pos.symbol}: ${pnlPct.toFixed(2)}%. Capital protegido. SL necessário para sobreviver no mercado.`);
-    delete positions[pos.pairAddress];updateStats();fetchBal();
-  }catch(e){addLog('WARN',`Erro venda ${pos.symbol}: `+e.message);}
+
+async function executeSell(pos, pair, reason) {
+  const pnlPct = (pos.currentPrice - pos.entryPrice) / pos.entryPrice * 100;
+  const pnlUSD = pos.amountSOL * (pnlPct / 100) * solPriceUSD;
+  try {
+    const slip  = parseFloat(document.getElementById('p-slip').value) * 200;
+    const qr    = await fetch(`${JUPITER}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slip}`);
+    const quote = await qr.json(); if (quote.error) throw new Error(quote.error);
+    const sr    = await fetch(`${JUPITER}/swap`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        quoteResponse:            quote,
+        userPublicKey:            wallet,
+        wrapAndUnwrapSol:         true,
+        skipUserAccountRpcCalls:  true,
+        prioritizationFeeLamports: 5000
+      })
+    });
+    const sd = await sr.json();
+    if (!sd.swapTransaction) throw new Error('Sem swap tx: '+(sd.error||'erro'));
+    await signAndSend(sd.swapTransaction);
+
+    const vp = parseFloat(document.getElementById('p-vault').value);
+    if (pnlUSD > 0) stats.vault += pnlUSD * (vp / 100);
+    stats.pnl += pnlUSD; if (pnlUSD > 0) stats.wins++;
+
+    const em = reason==='TAKE_PROFIT'?'TAKE PROFIT':reason==='TRAILING_STOP'?'TRAILING':reason==='DUMP_EMERGENCY'?'EMERGÊNCIA':'STOP LOSS';
+    addLog('SELL', `${pos.symbol} [${em}] ${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%`, pnlUSD);
+    if (pnlUSD > 0) aiAuto(`Vendi ${pos.symbol} com +${pnlPct.toFixed(2)}% de lucro. ${vp}% guardado no cofre.`);
+    else            aiAuto(`Stop em ${pos.symbol}: ${pnlPct.toFixed(2)}%. Capital protegido.`);
+    delete positions[pos.pairAddress]; updateStats(); fetchBal();
+  } catch(e) { addLog('WARN',`Erro venda ${pos.symbol}: `+e.message); }
 }
 
-// RENDER POS
-function renderPos(){
-  const area=document.getElementById('pos-area');
-  const keys=Object.keys(positions);
-  document.getElementById('s-pos').textContent=keys.length;
-  if(!keys.length){area.innerHTML='<div style="padding:10px 0;color:var(--text3);font-size:11px">Nenhuma posição aberta.</div>';return;}
-  area.innerHTML=keys.map(k=>{
-    const p=positions[k];
-    const pnl=(p.currentPrice-p.entryPrice)/p.entryPrice*100;
-    const pos2=pnl>=0,bw=Math.min(Math.abs(pnl)/20*100,100);
-    return `<div class="pi2"><div class="ptok">${p.symbol}</div>
-      <div class="pbar-w"><div class="pbar-bg"><div class="pbar ${pos2?'profit':'loss'}" style="width:${bw}%"></div></div>
-      <div style="font-size:9px;color:var(--text3);margin-top:2px">$${fmtPx(p.entryPrice)} → $${fmtPx(p.currentPrice)}</div></div>
-      <div class="ppnl ${pos2?'pos':'neg'}">${pos2?'+':''}${pnl.toFixed(2)}%</div></div>`;
+// ─── RENDER POS ──────────────────────────────────────────────────────────────
+function renderPos() {
+  const area = document.getElementById('pos-area');
+  const keys = Object.keys(positions);
+  document.getElementById('s-pos').textContent = keys.length;
+  if (!keys.length) { area.innerHTML = '<div style="padding:10px 0;color:var(--text3);font-size:11px">Nenhuma posição aberta.</div>'; return; }
+  area.innerHTML = keys.map(k => {
+    const p = positions[k];
+    const pnl  = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
+    const pos2 = pnl >= 0, bw = Math.min(Math.abs(pnl)/20*100, 100);
+    return `<div class="pi2">
+      <div class="ptok">${p.symbol}</div>
+      <div class="pbar-w">
+        <div class="pbar-bg"><div class="pbar ${pos2?'profit':'loss'}" style="width:${bw}%"></div></div>
+        <div style="font-size:9px;color:var(--text3);margin-top:2px">$${fmtPx(p.entryPrice)} → $${fmtPx(p.currentPrice)}</div>
+      </div>
+      <div class="ppnl ${pos2?'pos':'neg'}">${pos2?'+':''}${pnl.toFixed(2)}%</div>
+    </div>`;
   }).join('');
 }
 
-// STATS
-function updateStats(){
-  const pe=document.getElementById('s-pnl');
-  pe.textContent=(stats.pnl>=0?'+':'')+'$'+Math.abs(stats.pnl).toFixed(2);
-  pe.className='sv '+(stats.pnl>=0?'g':'r');
-  document.getElementById('s-pnlsub').textContent=(stats.pnl/170).toFixed(4)+' SOL';
-  document.getElementById('s-trades').textContent=stats.trades;
-  document.getElementById('s-wr').textContent='Win: '+(stats.trades>0?Math.round(stats.wins/stats.trades*100):0)+'%';
-  document.getElementById('s-ana').textContent=stats.analyzed;
-  document.getElementById('s-rej').textContent='Rej: '+stats.rejected;
-  document.getElementById('s-vault').textContent='$'+stats.vault.toFixed(2);
-  document.getElementById('vault-v').textContent='$'+stats.vault.toFixed(2);
+// ─── STATS ───────────────────────────────────────────────────────────────────
+function updateStats() {
+  const pe = document.getElementById('s-pnl');
+  pe.textContent = (stats.pnl>=0?'+':'')+'$'+Math.abs(stats.pnl).toFixed(2);
+  pe.className   = 'sv ' + (stats.pnl>=0?'g':'r');
+  document.getElementById('s-pnlsub').textContent  = (stats.pnl/solPriceUSD).toFixed(4)+' SOL';
+  document.getElementById('s-trades').textContent  = stats.trades;
+  document.getElementById('s-wr').textContent      = 'Win: '+(stats.trades>0?Math.round(stats.wins/stats.trades*100):0)+'%';
+  document.getElementById('s-ana').textContent     = stats.analyzed;
+  document.getElementById('s-rej').textContent     = 'Rej: '+stats.rejected;
+  document.getElementById('s-vault').textContent   = '$'+stats.vault.toFixed(2);
+  document.getElementById('vault-v').textContent   = '$'+stats.vault.toFixed(2);
 }
 
-// AI
-async function sendAI(){
-  const inp=document.getElementById('ai-input');
-  const msg=inp.value.trim();if(!msg)return;
-  inp.value='';appendMsg('user',msg);await callAI(msg);
+// ─── AI ──────────────────────────────────────────────────────────────────────
+async function sendAI() {
+  const inp = document.getElementById('ai-input');
+  const msg = inp.value.trim(); if (!msg) return;
+  inp.value = ''; appendMsg('user', msg); await callAI(msg);
 }
-async function askAI(msg){appendMsg('user',msg);await callAI(msg);}
-async function askAICtx(){
-  const pArr=Object.values(positions);
-  const ctx=pArr.length>0
-    ?`Tenho ${pArr.length} posição(ões): ${pArr.map(p=>`${p.symbol} entrada $${p.entryPrice.toExponential(2)} atual $${p.currentPrice.toExponential(2)}`).join(', ')}. Análise?`
-    :'Sem posições abertas. O que recomenda agora?';
-  appendMsg('user',ctx);await callAI(ctx);
+async function askAI(msg)  { appendMsg('user', msg); await callAI(msg); }
+async function askAICtx() {
+  const pArr = Object.values(positions);
+  const ctx  = pArr.length > 0
+    ? `Tenho ${pArr.length} posição(ões): ${pArr.map(p=>`${p.symbol} entrada $${p.entryPrice.toExponential(2)} atual $${p.currentPrice.toExponential(2)}`).join(', ')}. Análise?`
+    : 'Sem posições abertas. O que recomenda agora?';
+  appendMsg('user', ctx); await callAI(ctx);
 }
-function aiAuto(msg){appendMsg('assistant',msg);}
-function appendMsg(role,content){
-  const msgs=document.getElementById('ai-msgs');
-  const div=document.createElement('div');
-  div.className='aimsg '+role;
-  div.innerHTML=`<div class="role">${role==='user'?'VOCÊ':'QUANTUM AI'}</div><div class="bubble">${content}</div>`;
-  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
-  aiHistory.push({role,content});
-  if(aiHistory.length>20)aiHistory=aiHistory.slice(-20);
+function aiAuto(msg) { appendMsg('assistant', msg); }
+
+function appendMsg(role, content) {
+  const msgs = document.getElementById('ai-msgs');
+  const div  = document.createElement('div');
+  div.className = 'aimsg ' + role;
+  div.innerHTML = `<div class="role">${role==='user'?'VOCÊ':'QUANTUM AI'}</div><div class="bubble">${content}</div>`;
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+  aiHistory.push({role, content});
+  if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
 }
-async function callAI(msg){
-  const think=document.createElement('div');
-  think.className='ai-think';think.textContent='Analisando...';
-  document.getElementById('ai-msgs').appendChild(think);
-  document.getElementById('ai-msgs').scrollTop=9999;
-  const sys=`Você é a IA do Quantum Scalp Bot, especialista em trading Solana/DeFi.
+
+async function callAI(msg) {
+  const think = document.createElement('div');
+  think.className = 'ai-think'; think.textContent = 'Analisando...';
+  const msgs = document.getElementById('ai-msgs');
+  msgs.appendChild(think); msgs.scrollTop = 9999;
+
+  const sys = `Você é a IA do Quantum Scalp Bot, especialista em trading Solana/DeFi.
 Stats: P&L $${stats.pnl.toFixed(2)}, Trades ${stats.trades}, Win ${stats.trades>0?Math.round(stats.wins/stats.trades*100):0}%, Posições ${Object.keys(positions).length}, Cofre $${stats.vault.toFixed(2)}.
 Params: TP ${document.getElementById('p-tp').value}%, SL ${document.getElementById('p-sl').value}%, Trail ${document.getElementById('p-trail').value}%, Size ${document.getElementById('p-size').value} SOL.
+Preço SOL: $${solPriceUSD.toFixed(2)}. Modo assinatura: ${signMode}.
 Responda em português, direto, máximo 4 frases, focado em trading Solana.`;
-  try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,system:sys,
-        messages:aiHistory.filter(m=>m.role==='user'||m.role==='assistant').slice(-10)})});
-    const data=await r.json();
+
+  // Garantir histórico começa com 'user'
+  let apiMsgs = aiHistory.filter(m => m.role==='user'||m.role==='assistant').slice(-10);
+  if (apiMsgs.length > 0 && apiMsgs[0].role === 'assistant') apiMsgs = apiMsgs.slice(1);
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model:    'claude-sonnet-4-6',
+        max_tokens: 400,
+        system:   sys,
+        messages: apiMsgs
+      })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      think.remove();
+      appendMsg('assistant','Erro API: '+(err.error?.message||r.status));
+      return;
+    }
+    const data = await r.json();
     think.remove();
-    appendMsg('assistant',data.content?.[0]?.text||'Erro na resposta.');
-  }catch(e){think.remove();appendMsg('assistant','Erro de conexão com a IA.');}
+    appendMsg('assistant', data.content?.[0]?.text || 'Sem resposta.');
+  } catch(e) {
+    think.remove();
+    appendMsg('assistant','Erro de conexão: '+e.message);
+  }
 }
 
-// DEMO
-function demoScan(){
-  const tk=[
-    {sym:'BONK2',c24:38,c1:7,c5:2.1,vol:412000,liq:78000,s:55,b:45,age:220},
-    {sym:'POPCAT',c24:55,c1:11,c5:3.1,vol:680000,liq:140000,s:38,b:62,age:180},
-    {sym:'DOGWIF',c24:22,c1:4,c5:1.2,vol:285000,liq:52000,s:42,b:58,age:310},
-    {sym:'MEMEX',c24:18,c1:3,c5:.9,vol:190000,liq:44000,s:45,b:55,age:480},
-    {sym:'RUGX',c24:890,c1:-42,c5:-22,vol:30000,liq:2000,s:90,b:10,age:4},
-    {sym:'SOLCAT',c24:31,c1:6,c5:1.8,vol:340000,liq:88000,s:40,b:60,age:260},
+// ─── DEMO ────────────────────────────────────────────────────────────────────
+function demoScan() {
+  const tk = [
+    {sym:'BONK2', c24:38, c1:7,   c5:2.1, vol:412000, liq:78000,  s:55, b:45, age:220},
+    {sym:'POPCAT',c24:55, c1:11,  c5:3.1, vol:680000, liq:140000, s:38, b:62, age:180},
+    {sym:'DOGWIF',c24:22, c1:4,   c5:1.2, vol:285000, liq:52000,  s:42, b:58, age:310},
+    {sym:'MEMEX', c24:18, c1:3,   c5:.9,  vol:190000, liq:44000,  s:45, b:55, age:480},
+    {sym:'RUGX',  c24:890,c1:-42, c5:-22, vol:30000,  liq:2000,   s:90, b:10, age:4},
+    {sym:'SOLCAT',c24:31, c1:6,   c5:1.8, vol:340000, liq:88000,  s:40, b:60, age:260},
   ];
-  processTokens(tk.map(t=>({pairAddress:'demo-'+t.sym,chainId:'solana',
-    baseToken:{symbol:t.sym,address:'Demo'+t.sym},priceUsd:(Math.random()*.001).toFixed(8),
-    priceChange:{m5:t.c5,h1:t.c1,h24:t.c24},volume:{h24:t.vol},liquidity:{usd:t.liq},
-    txns:{h1:{buys:t.b,sells:t.s}},pairCreatedAt:Date.now()-t.age*60000})));
+  processTokens(tk.map(t => ({
+    pairAddress: 'demo-'+t.sym, chainId: 'solana',
+    baseToken:   {symbol:t.sym, address:'Demo'+t.sym},
+    priceUsd:    (Math.random()*.001).toFixed(8),
+    priceChange: {m5:t.c5, h1:t.c1, h24:t.c24},
+    volume:      {h24:t.vol}, liquidity: {usd:t.liq},
+    txns:        {h1:{buys:t.b, sells:t.s}},
+    pairCreatedAt: Date.now() - t.age*60000
+  })));
 }
 
-// HELPERS
-function fmt(n){return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n.toFixed(0);}
-function fmtPx(p){if(!p)return'0';if(p<.000001)return p.toExponential(2);if(p<.001)return p.toFixed(7);if(p<1)return p.toFixed(5);return p.toFixed(3);}
-function addLog(type,msg,pnl){
-  const now=new Date().toLocaleTimeString('pt-BR');
-  const area=document.getElementById('log-area');
-  const ph=pnl!=null?`<span class="lpnl ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(3)}</span>`:'<span class="lpnl"></span>';
-  const e=document.createElement('div');e.className='le';
-  e.innerHTML=`<span class="lt">${now}</span><span class="ltype ${type}">${type}</span><span class="lmsg">${msg}</span>${ph}`;
-  area.insertBefore(e,area.firstChild);
-  if(area.children.length>120)area.removeChild(area.lastChild);
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function fmt(n)   { return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n.toFixed(0); }
+function fmtPx(p) { if(!p)return'0';if(p<.000001)return p.toExponential(2);if(p<.001)return p.toFixed(7);if(p<1)return p.toFixed(5);return p.toFixed(3); }
+
+function addLog(type, msg, pnl) {
+  const now  = new Date().toLocaleTimeString('pt-BR');
+  const area = document.getElementById('log-area');
+  const ph   = pnl!=null
+    ? `<span class="lpnl ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(3)}</span>`
+    : '<span class="lpnl"></span>';
+  const e = document.createElement('div'); e.className = 'le';
+  const msgSafe = String(msg).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  e.innerHTML = `<span class="lt">${now}</span><span class="ltype ${type}">${type}</span><span class="lmsg">${msgSafe}</span>${ph}`;
+  area.insertBefore(e, area.firstChild);
+  if (area.children.length > 120) area.removeChild(area.lastChild);
 }
-window.addEventListener('resize',()=>{if(selIdx!=null&&opportunities[selIdx])drawChart(opportunities[selIdx].pair);});
+
+window.addEventListener('resize', () => {
+  if (selIdx != null && opportunities[selIdx]) drawChart(opportunities[selIdx].pair);
+});
+
 addLog('INFO','Quantum Scalp AI Bot carregado.');
 addLog('INFO','Anti-Rug · Honeypot · Dump · P&D · IA ativas.');
 </script>
