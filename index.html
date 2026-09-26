@@ -375,6 +375,12 @@
       <div style="font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.5">
         Conecte pela Phantom ou Trust Wallet no topo da tela — a carteira assina cada transação, sua chave privada nunca passa por este app. Use uma carteira dedicada, separada da sua principal, com apenas o valor que você aceita perder.
       </div>
+      <div class="param-label" style="margin-bottom:4px">RPC endpoint</div>
+      <input class="param-input" type="text" id="rpc-endpoint" value="https://solana-rpc.publicnode.com" style="width:100%; margin-bottom:6px">
+      <div style="font-size:9px; color:var(--text3); margin-bottom:8px; line-height:1.4">
+        O RPC público da Solana (api.mainnet-beta.solana.com) bloqueia chamadas de navegador. Pra confiabilidade real, crie um RPC grátis em helius.dev ou quicknode.com e cole a URL aqui.
+      </div>
+      <button class="btn-start start" style="padding:8px; font-size:11px" onclick="testConnection()">🔌 TESTAR CONEXÃO</button>
     </div>
 
     <!-- CONFIRMAÇÃO -->
@@ -383,6 +389,10 @@
       <div class="param-row">
         <div class="param-label" title="Recomendado: mantenha ligado. O manual do Insentos recomenda exigir confirmação antes de cada trade.">Confirmar cada compra</div>
         <input type="checkbox" id="require-confirm" checked style="width:18px; height:18px">
+      </div>
+      <div class="param-row">
+        <div class="param-label" title="Se desligado, quando a busca de tokens falhar o bot mostra um erro em vez de dados fictícios">Modo demo se API falhar</div>
+        <input type="checkbox" id="allow-demo" style="width:18px; height:18px">
       </div>
     </div>
 
@@ -492,7 +502,10 @@
 
 const JUPITER_API = 'https://quote-api.jup.ag/v6';
 const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex';
-const RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
+const RPC_ENDPOINT_DEFAULT = 'https://solana-rpc.publicnode.com';
+function getRpcEndpoint() {
+  return document.getElementById('rpc-endpoint')?.value?.trim() || RPC_ENDPOINT_DEFAULT;
+}
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
@@ -620,15 +633,74 @@ function copyAddr() {
 async function fetchBalances() {
   if (!wallet) return;
   try {
-    const res = await fetch(RPC_ENDPOINT, {
+    const res = await fetch(getRpcEndpoint(), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance', params:[wallet] })
     });
+    if (!res.ok) throw new Error(`RPC retornou ${res.status} (${res.statusText}) — troque o RPC endpoint`);
     const data = await res.json();
-    const sol = (data.result?.value || 0) / 1e9;
-    document.getElementById('sol-val').textContent = sol.toFixed(4);
+    if (data.error) throw new Error('RPC: ' + data.error.message);
+    const sol = (data.result?.value ?? null);
+    if (sol === null) throw new Error('RPC não retornou saldo — verifique o endpoint');
+    document.getElementById('sol-val').textContent = (sol / 1e9).toFixed(4);
     document.getElementById('sol-balance').style.display = 'flex';
-  } catch(e) {}
+  } catch(e) {
+    addLog('WARN', 'Falha ao buscar saldo: ' + e.message);
+  }
+}
+
+// Testa cada etapa do pipeline separadamente e mostra o resultado real no log
+async function testConnection() {
+  addLog('INFO', '— Iniciando teste de conexão —');
+
+  // 1. Carteira
+  if (!wallet || !activeProvider) {
+    addLog('WARN', '❌ Carteira: não conectada.');
+  } else {
+    addLog('INFO', `✅ Carteira conectada: ${wallet.slice(0,8)}...`);
+  }
+
+  // 2. RPC
+  try {
+    const res = await fetch(getRpcEndpoint(), {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getHealth' })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    addLog('INFO', `✅ RPC (${getRpcEndpoint()}) respondendo.`);
+  } catch (e) {
+    addLog('WARN', `❌ RPC falhou: ${e.message}. Troque o RPC endpoint (helius.dev / quicknode.com têm plano grátis).`);
+  }
+
+  // 3. Saldo real
+  if (wallet) await fetchBalances();
+
+  // 4. DexScreener (fonte dos tokens escaneados)
+  try {
+    const res = await fetch(`${DEXSCREENER_API}/search?q=solana`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const n = (data.pairs || []).filter(p => p.chainId === 'solana').length;
+    if (n === 0) throw new Error('resposta vazia');
+    addLog('INFO', `✅ DexScreener OK — ${n} pares Solana retornados. Os tokens escaneados são reais.`);
+  } catch (e) {
+    addLog('WARN', `❌ DexScreener falhou: ${e.message}. Sem isso, o scan não tem dados reais.`);
+  }
+
+  // 5. Jupiter (necessário pra comprar/vender de verdade)
+  try {
+    const res = await fetch(`${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=100000000&slippageBps=50`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.outAmount) throw new Error('sem rota retornada');
+    addLog('INFO', '✅ Jupiter OK — cotações e swaps devem funcionar.');
+  } catch (e) {
+    addLog('WARN', `❌ Jupiter falhou: ${e.message}. Sem isso, o bot não consegue comprar/vender de verdade.`);
+  }
+
+  addLog('INFO', '— Teste concluído. Veja os itens ❌ acima — são eles que estão impedindo o bot de operar de verdade. —');
 }
 
 // ============================================================
@@ -734,10 +806,15 @@ async function runScan() {
 
     document.getElementById('scan-status').textContent = `✓ ${opportunities.length} oportunidades · ${rejected} rejeitadas`;
   } catch(e) {
-    addLog('WARN', 'Erro no scan: ' + e.message);
-    document.getElementById('scan-status').textContent = '⚠ Erro no scan';
-    // Demo data quando API falha (CORS/rate limit)
-    generateDemoData();
+    addLog('WARN', 'Erro no scan (DexScreener): ' + e.message);
+    document.getElementById('scan-status').textContent = '⚠ Erro no scan — dados reais indisponíveis';
+    if (document.getElementById('allow-demo').checked) {
+      addLog('WARN', 'Modo demo ativado manualmente — os tokens abaixo são FICTÍCIOS, não é o mercado real.');
+      generateDemoData();
+    } else {
+      opportunities = [];
+      renderOpportunities();
+    }
   }
 }
 
@@ -1102,7 +1179,7 @@ async function signAndSendSwap(swapTransactionBase64) {
     const signedTx = await activeProvider.signTransaction(tx);
     const rawTx = signedTx.serialize();
     const b64 = btoa(String.fromCharCode(...rawTx));
-    const sendRes = await fetch(RPC_ENDPOINT, {
+    const sendRes = await fetch(getRpcEndpoint(), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction', params:[b64, {skipPreflight:true, maxRetries:3, encoding:'base64'}] })
     });
