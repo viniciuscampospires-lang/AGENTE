@@ -857,6 +857,34 @@ function analyzeToken(pair) {
 
   // ---- BLOQUEIOS ABSOLUTOS ----
 
+  // Token sem nome ou símbolo — jamais comprar token sem identidade
+  const tokenSymbol = pair.baseToken?.symbol || '';
+  const tokenName = pair.baseToken?.name || '';
+  if (!tokenSymbol || tokenSymbol === '' || tokenSymbol.toLowerCase() === 'unknown' ||
+      !tokenName || tokenName === '' || tokenName.toLowerCase() === 'spl token') {
+    blocked = true; risks.push('Token sem nome/símbolo identificado');
+    return { score: 0, risks, signals, blocked, stage, danger: 'SEM IDENTIDADE' };
+  }
+
+  // Liquidez ausente ou zero — campo nulo é tratado como bloqueio, não como zero permitido
+  const liqRaw = pair.liquidity?.usd;
+  if (liqRaw === undefined || liqRaw === null || liqRaw === '' || isNaN(parseFloat(liqRaw))) {
+    blocked = true; risks.push('Liquidez não informada pela API');
+    return { score: 0, risks, signals, blocked, stage, danger: 'LIQ AUSENTE' };
+  }
+
+  // Liquidez mínima absoluta de segurança ($500 mínimo independente de configuração)
+  if (liq < 500) {
+    blocked = true; risks.push(`Liquidez crítica ($${liq.toFixed(0)}) — risco de não conseguir vender`);
+    return { score: 0, risks, signals, blocked, stage, danger: 'LIQ CRÍTICA' };
+  }
+
+  // Liquidez mínima configurada pelo usuário
+  if (liq < parseInt(document.getElementById('min-liq').value)) {
+    blocked = true; risks.push(`Liquidez insuficiente ($${liq.toFixed(0)})`);
+    return { score: 0, risks, signals, blocked, stage, danger: 'BAIXA LIQ' };
+  }
+
   // Market cap fora da faixa configurada (filtro estilo Insentos)
   const mcapMin = parseInt(document.getElementById('mcap-min').value) || 0;
   const mcapMax = parseInt(document.getElementById('mcap-max').value) || 0;
@@ -867,12 +895,6 @@ function analyzeToken(pair) {
   if (mcapMax > 0 && mcap > mcapMax) {
     blocked = true; risks.push(`Market cap acima do máximo ($${mcap.toFixed(0)})`);
     return { score: 0, risks, signals, blocked, stage, danger: 'MCAP ALTO' };
-  }
-
-  // Liquidez mínima
-  if (liq < parseInt(document.getElementById('min-liq').value)) {
-    blocked = true; risks.push('Liquidez insuficiente');
-    return { score: 0, risks, signals, blocked, stage, danger: 'BAIXA LIQ' };
   }
 
   // Pool muito nova (< min configurado)
@@ -888,10 +910,23 @@ function analyzeToken(pair) {
     return { score: 0, risks, signals, blocked, stage, danger: 'P&D' };
   }
 
+  // Token em queda severa nas últimas 24h (como o token comprado: -40%)
+  if (priceChange24h < -30) {
+    blocked = true; risks.push(`Queda severa 24h (${priceChange24h.toFixed(1)}%)`);
+    return { score: 0, risks, signals, blocked, stage, danger: 'QUEDA 24H' };
+  }
+
   // Dump em andamento: queda > 15% em 5 min
   if (priceChange5m < -15) {
     blocked = true; risks.push('Dump em andamento (-15% em 5min)');
     return { score: 0, risks, signals, blocked, stage, danger: 'DUMP' };
+  }
+
+  // Pouquíssimos traders — mercado ilíquido na prática
+  const traders24h = (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0);
+  if (traders24h < 20) {
+    blocked = true; risks.push(`Traders insuficientes nas últimas 24h (${traders24h})`);
+    return { score: 0, risks, signals, blocked, stage, danger: 'SEM TRADERS' };
   }
 
   // Sell pressure extrema: sells > 80% das transações
