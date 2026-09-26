@@ -380,6 +380,11 @@
       <div style="font-size:9px; color:var(--text3); margin-bottom:8px; line-height:1.4">
         O RPC público da Solana (api.mainnet-beta.solana.com) bloqueia chamadas de navegador. Pra confiabilidade real, crie um RPC grátis em helius.dev ou quicknode.com e cole a URL aqui.
       </div>
+      <div class="param-label" style="margin-bottom:4px">Jupiter API key (opcional)</div>
+      <input class="param-input" type="password" id="jupiter-key" placeholder="deixe vazio pra usar o tier grátis" style="width:100%; margin-bottom:6px">
+      <div style="font-size:9px; color:var(--text3); margin-bottom:8px; line-height:1.4">
+        Hoje usa o endpoint grátis lite-api.jup.ag. Se a Jupiter exigir chave (eles vêm migrando todo mundo pra isso), gere uma de graça em portal.jup.ag e cole aqui.
+      </div>
       <button class="btn-start start" style="padding:8px; font-size:11px" onclick="testConnection()">🔌 TESTAR CONEXÃO</button>
     </div>
 
@@ -500,7 +505,13 @@
 // QUANTUM SCALP BOT - SOLANA AUTONOMOUS TRADING
 // ============================================================
 
-const JUPITER_API = 'https://quote-api.jup.ag/v6';
+// quote-api.jup.ag/v6 foi desativada pela Jupiter em out/2025. Usando o endpoint gratuito atual (lite-api).
+// Se a Jupiter desativar este também, gere uma chave grátis em portal.jup.ag e preencha o campo na sidebar.
+const JUPITER_API = 'https://lite-api.jup.ag/swap/v1';
+function jupiterHeaders() {
+  const key = document.getElementById('jupiter-key')?.value?.trim();
+  return key ? { 'Content-Type': 'application/json', 'x-api-key': key } : { 'Content-Type': 'application/json' };
+}
 const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex';
 const RPC_ENDPOINT_DEFAULT = 'https://solana-rpc.publicnode.com';
 function getRpcEndpoint() {
@@ -691,7 +702,7 @@ async function testConnection() {
 
   // 5. Jupiter (necessário pra comprar/vender de verdade)
   try {
-    const res = await fetch(`${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=100000000&slippageBps=50`);
+    const res = await fetch(`${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=100000000&slippageBps=50`, { headers: jupiterHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.outAmount) throw new Error('sem rota retornada');
@@ -771,7 +782,7 @@ async function runScan() {
     const pairs = data.pairs || [];
 
     // Filtra apenas Solana
-    const solanaPairs = pairs.filter(p => p.chainId === 'solana');
+    const solanaPairs = pairs.filter(p => p.chainId === 'solana' && p.baseToken?.address !== SOL_MINT);
 
     opportunities = [];
     let rejected = 0;
@@ -1153,6 +1164,8 @@ function askBuyConfirmation(pair, analysis, tradeSizeSOL, quote) {
       Impacto de preço estimado: ${impactPct}%<br><br>
       Esta é uma ordem REAL na blockchain Solana. Depois de enviada, não pode ser desfeita.`;
     document.getElementById('confirm-buy-overlay').style.display = 'flex';
+    document.getElementById('confirm-buy-overlay').scrollIntoView({ block: 'center' });
+    addLog('BUY', `⏳ Aguardando sua confirmação para comprar ${pair.baseToken.symbol} (${tradeSizeSOL} SOL, impacto ${impactPct}%). Se não aparecer um popup na tela, role pra cima/baixo ou toque na tela.`);
   });
 }
 function confirmPendingBuy() {
@@ -1161,7 +1174,7 @@ function confirmPendingBuy() {
 }
 function cancelPendingBuy() {
   document.getElementById('confirm-buy-overlay').style.display = 'none';
-  if (pendingBuy) { pendingBuy.resolve(false); pendingBuy = null; }
+  if (pendingBuy) { addLog('INFO', 'Compra cancelada pelo usuário.'); pendingBuy.resolve(false); pendingBuy = null; }
 }
 
 // Assina com a carteira conectada (Wallet Standard / Phantom / Trust Wallet) e envia. Nunca usa chave crua.
@@ -1208,15 +1221,18 @@ async function executeBuy(pair, analysis) {
   try {
     // 1. Pega quote do Jupiter
     const quoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${amountLamports}&slippageBps=${slippage}`
+      `${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${amountLamports}&slippageBps=${slippage}`,
+      { headers: jupiterHeaders() }
     );
+    if (!quoteRes.ok) { addLog('WARN', `Quote HTTP ${quoteRes.status} — Jupiter recusou a requisição (verifique a API key).`); return; }
     const quote = await quoteRes.json();
 
     if (quote.error) { addLog('WARN', `Quote error: ${quote.error}`); return; }
 
     // 2. Verifica honeypot: simula sell antes de comprar
     const sellQuoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slippage * 2}`
+      `${JUPITER_API}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slippage * 2}`,
+      { headers: jupiterHeaders() }
     );
     const sellQuote = await sellQuoteRes.json();
     if (!sellQuote.outAmount) {
@@ -1238,7 +1254,7 @@ async function executeBuy(pair, analysis) {
     // 4. Pega swap transaction
     const swapRes = await fetch(`${JUPITER_API}/swap`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: jupiterHeaders(),
       body: JSON.stringify({
         quoteResponse: quote,
         userPublicKey: wallet,
@@ -1337,13 +1353,14 @@ async function executeSell(pos, pair, reason) {
   try {
     const slippage = parseFloat(document.getElementById('slippage').value) * 100 * 2;
     const quoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slippage}`
+      `${JUPITER_API}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slippage}`,
+      { headers: jupiterHeaders() }
     );
     const quote = await quoteRes.json();
     if (quote.error) throw new Error(quote.error);
 
     const swapRes = await fetch(`${JUPITER_API}/swap`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: jupiterHeaders(),
       body: JSON.stringify({ quoteResponse: quote, userPublicKey: wallet, wrapAndUnwrapSol: true, skipUserAccountRpcCalls: true, prioritizationFeeLamports: 5000 })
     });
     const swapData = await swapRes.json();
