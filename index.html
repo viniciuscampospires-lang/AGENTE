@@ -442,13 +442,14 @@ td.num {
         <th data-sort="txns" style="text-align:right">Txns 1h</th>
         <th data-sort="vol" style="text-align:right">Vol 24h</th>
         <th data-sort="liq" style="text-align:right">Liquidez</th>
+        <th data-sort="mc"  style="text-align:right">MC</th>
         <th data-sort="age" style="text-align:right">Idade</th>
         <th>Links</th>
       </tr>
     </thead>
     <tbody id="tbody">
       <tr class="state-row">
-        <td colspan="13"><span class="si"></span>Conectando às fontes de dados…</td>
+        <td colspan="14"><span class="si"></span>Conectando às fontes de dados…</td>
       </tr>
     </tbody>
   </table>
@@ -621,8 +622,11 @@ function normGT(pool, inclMap) {
     volume      : { h24: parseFloat(a.volume_usd?.h24   || 0) },
     liquidity   : { usd: parseFloat(a.reserve_in_usd    || 0) },
     txns        : { buys: txH1.buys||0, sells: txH1.sells||0 },
+    mc          : parseFloat(a.market_cap_usd || a.fdv_usd || 0),
     pairCreatedAt: a.pool_created_at ? +new Date(a.pool_created_at) : null,
     url         : `https://dexscreener.com/solana/${a.address}`,
+    urlMeteora  : `https://app.meteora.ag/dlmm/${a.address}`,
+    urlGT       : `https://www.geckoterminal.com/solana/pools/${a.address}`,
     labels      : dexId.includes('v2') ? ['DLMM v2'] : [],
     _src        : 'gt',
   };
@@ -641,8 +645,11 @@ function normDS(p) {
     volume      : p.volume      || {},
     liquidity   : p.liquidity   || {},
     txns        : { buys: p.txns?.h1?.buys||0, sells: p.txns?.h1?.sells||0 },
+    mc          : parseFloat(p.marketCap || p.fdv || 0),
     pairCreatedAt: p.pairCreatedAt || null,
     url         : p.url || `https://dexscreener.com/solana/${p.pairAddress}`,
+    urlMeteora  : `https://app.meteora.ag/dlmm/${p.pairAddress}`,
+    urlGT       : `https://www.geckoterminal.com/solana/pools/${p.pairAddress}`,
     labels      : p.labels || [],
     _src        : 'ds',
   };
@@ -770,6 +777,7 @@ function sortPairs(pairs) {
       case 'txns'  : av=(a.txns?.buys||0)+(a.txns?.sells||0); bv=(b.txns?.buys||0)+(b.txns?.sells||0); break;
       case 'vol'   : av=+(a.volume?.h24||0);              bv=+(b.volume?.h24||0);            break;
       case 'liq'   : av=+(a.liquidity?.usd||0);           bv=+(b.liquidity?.usd||0);         break;
+      case 'mc'    : av=+(a.mc||0);                       bv=+(b.mc||0);                     break;
       case 'age'   : av=+(a.pairCreatedAt||0);            bv=+(b.pairCreatedAt||0);          break;
       default      : av=0; bv=0;
     }
@@ -820,7 +828,7 @@ function renderTable(newAddrs) {
   if (!pairs.length) {
     // Se allPairs também está vazio, exibe estado de erro real
     if (!allPairs.length) return;  // showError() já cuida disso
-    tbody.innerHTML = `<tr class="state-row"><td colspan="13">
+    tbody.innerHTML = `<tr class="state-row"><td colspan="14">
       <div class="err-state">
         <div class="err-title" style="color:var(--muted)">Nenhum par neste filtro</div>
       </div>
@@ -878,12 +886,15 @@ function renderTable(newAddrs) {
       <td class="txns">${txHtml}</td>
       <td class="vol">${fmtK(pair.volume?.h24)}</td>
       <td class="liq">${fmtK(pair.liquidity?.usd)}</td>
+      <td class="liq">${pair.mc > 0 ? fmtK(pair.mc) : '—'}</td>
       <td class="age ${age.cls}">${age.text}</td>
       <td onclick="event.stopPropagation()">
         <div class="link-row">
-          <a href="${dexUrl}" target="_blank" class="ext-link">DS</a>
-          <a href="${beUrl}"  target="_blank" class="ext-link">BE</a>
-          <a href="${scUrl}"  target="_blank" class="ext-link">SC</a>
+          <a href="${dexUrl}"           target="_blank" class="ext-link">DS</a>
+          <a href="${pair.urlMeteora}"  target="_blank" class="ext-link">MT</a>
+          <a href="${pair.urlGT}"       target="_blank" class="ext-link">GT</a>
+          <a href="${beUrl}"            target="_blank" class="ext-link">BE</a>
+          <button class="ext-link copy-btn" data-addr="${base.address}" title="Copiar contrato">⧉</button>
         </div>
       </td>
     </tr>`;
@@ -891,7 +902,7 @@ function renderTable(newAddrs) {
 }
 
 function showError(msgs) {
-  document.getElementById('tbody').innerHTML = `<tr class="state-row"><td colspan="13">
+  document.getElementById('tbody').innerHTML = `<tr class="state-row"><td colspan="14">
     <div class="err-state">
       <div class="err-title">⚠ Nenhum dado retornado pelas APIs</div>
       <div class="err-detail">${msgs.join(' · ')}</div>
@@ -1022,6 +1033,31 @@ document.querySelectorAll('.age-btn').forEach(btn => {
     btn.classList.add('active');
     ageFilter = parseInt(btn.dataset.age, 10);
     renderTable(null);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   COPIAR CONTRATO
+   ═══════════════════════════════════════════════════════════ */
+document.getElementById('tbody').addEventListener('click', e => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  const addr = btn.dataset.addr;
+  if (!addr) return;
+  const prev = btn.textContent;
+  navigator.clipboard.writeText(addr).then(() => {
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev }, 1200);
+  }).catch(() => {
+    // fallback: selecionar texto
+    const el = document.createElement('textarea');
+    el.value = addr; el.style.position = 'fixed'; el.style.opacity = '0';
+    document.body.appendChild(el); el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev }, 1200);
   });
 });
 
