@@ -676,14 +676,15 @@ async function safeFetch(url) {
 }
 
 // Processa um endpoint GeckoTerminal e adiciona ao Map
-async function gtEndpoint(url, results) {
+// knownDex: dex slug da URL — usado como fallback se a API não retornar o dexId
+async function gtEndpoint(url, results, knownDex) {
   try {
     const d = await safeFetch(url);
     const inclMap = {};
     (d.included || []).forEach(i => { inclMap[i.id] = i });
     (d.data || []).forEach(pool => {
       if (pool.attributes?.address) {
-        const p = normGT(pool, inclMap);
+        const p = normGT(pool, inclMap, knownDex);
         if (isMeteora(p) && !results.has(p.pairAddress)) results.set(p.pairAddress, p);
       }
     });
