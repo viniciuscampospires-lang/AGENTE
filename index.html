@@ -1,1556 +1,996 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QUANTUM SCALP · Solana Bot</title>
+<title>Meteora Scanner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+
 <style>
-  :root {
-    --bg: #0a0b0f;
-    --bg2: #0f1117;
-    --bg3: #13151e;
-    --bg4: #1a1d2a;
-    --border: rgba(255,255,255,0.07);
-    --border2: rgba(255,255,255,0.12);
-    --green: #00e676;
-    --green2: #00c853;
-    --red: #ff3d57;
-    --yellow: #ffc107;
-    --blue: #448aff;
-    --purple: #b388ff;
-    --text: #e8eaf0;
-    --text2: #8a8fa8;
-    --text3: #555970;
-    --card: #111420;
-    --radius: 10px;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; min-height: 100vh; overflow-x: hidden; }
+/* === DESIGN TOKENS
+   Layout : sticky header → stats strip → scrollable table
+   Palette: deep blue-black base / cyan accent / semantic green-red
+   Type   : JetBrains Mono for data, Inter for chrome             */
 
-  /* HEADER */
-  .header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; z-index: 100; }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #448aff22, #00e67622); border: 1px solid var(--green); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 2px; color: var(--green); }
-  .logo-sub { font-size: 9px; color: var(--text3); letter-spacing: 3px; margin-top: 1px; }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
-  .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
-  .status-text { font-size: 11px; color: var(--text2); letter-spacing: 1px; }
+:root {
+  --bg        : #060a0e;
+  --surface   : #0c1118;
+  --surface2  : #111926;
+  --border    : #182030;
+  --border2   : #1e2a3e;
+  --accent    : #00c8f0;
+  --accent-glow: rgba(0,200,240,0.12);
+  --purple    : #a78bfa;
+  --purple-dim: rgba(167,139,250,0.14);
+  --green     : #00e099;
+  --green-dim : rgba(0,224,153,0.1);
+  --red       : #ff2e55;
+  --red-dim   : rgba(255,46,85,0.1);
+  --yellow    : #ffc400;
+  --text      : #c6d4ec;
+  --text2     : #7a8aab;
+  --muted     : #3e4e6e;
+  color-scheme: dark;
+}
 
-  /* WALLET BAR */
-  .wallet-bar { background: var(--bg3); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .wallet-info { display: flex; align-items: center; gap: 8px; }
-  .wallet-addr { font-size: 11px; color: var(--text2); background: var(--bg4); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; }
-  .wallet-addr:hover { border-color: var(--green); color: var(--green); }
-  .balance-chip { display: flex; align-items: center; gap: 6px; background: var(--bg4); padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); }
-  .balance-val { font-size: 13px; font-weight: 700; color: var(--text); }
-  .balance-label { font-size: 10px; color: var(--text3); }
-  .btn-connect { background: var(--green); color: #000; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; letter-spacing: 1px; }
-  .btn-connect:hover { background: var(--green2); }
-  .btn-connect.red { background: var(--red); color: #fff; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+html, body { height: 100% }
 
-  /* GRID LAYOUT */
-  .main { display: grid; grid-template-columns: 320px 1fr; grid-template-rows: auto 1fr; gap: 0; height: calc(100vh - 100px); }
-  .sidebar { border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg2); }
-  .content { display: flex; flex-direction: column; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  padding-left : max(16px, env(safe-area-inset-left,  0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+  -webkit-font-smoothing: antialiased;
+}
 
-  /* STATS ROW */
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
-  .stat-card { background: var(--bg2); padding: 14px 16px; }
-  .stat-label { font-size: 9px; color: var(--text3); letter-spacing: 2px; margin-bottom: 6px; }
-  .stat-val { font-size: 18px; font-weight: 700; }
-  .stat-val.green { color: var(--green); }
-  .stat-val.red { color: var(--red); }
-  .stat-val.yellow { color: var(--yellow); }
-  .stat-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+/* ── HEADER ── */
+.header {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 200;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  flex-wrap: wrap;
+}
 
-  /* SIDEBAR SECTIONS */
-  .section { border-bottom: 1px solid var(--border); padding: 14px 16px; }
-  .section-title { font-size: 9px; color: var(--text3); letter-spacing: 3px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .section-title::after { content:''; flex:1; height:1px; background: var(--border); }
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.logo svg { width: 28px; height: 28px; flex-shrink: 0 }
+.logo-hi { color: var(--accent) }
 
-  /* PARAMS */
-  .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .param-label { font-size: 11px; color: var(--text2); }
-  .param-input { background: var(--bg4); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 12px; padding: 4px 8px; width: 90px; text-align: right; }
-  .param-input:focus { outline: none; border-color: var(--green); }
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--green-dim);
+  border: 1px solid rgba(0,224,153,0.25);
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--green);
+}
+.live-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+  animation: blink 1.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  /* TOGGLE SWITCH */
-  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .toggle-label { font-size: 11px; color: var(--text2); }
-  .toggle { position: relative; width: 36px; height: 20px; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .slider { position: absolute; inset: 0; background: var(--bg4); border-radius: 20px; border: 1px solid var(--border); cursor: pointer; transition: .2s; }
-  .slider::before { content:''; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: var(--text3); border-radius: 50%; transition: .2s; }
-  input:checked + .slider { background: var(--green); border-color: var(--green); }
-  input:checked + .slider::before { transform: translateX(16px); background: #000; }
+.spacer { flex: 1; min-width: 0 }
 
-  /* SECURITY BADGES */
-  .sec-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; padding: 3px 8px; border-radius: 4px; margin: 2px; }
-  .sec-badge.active { background: rgba(0,230,118,.1); color: var(--green); border: 1px solid rgba(0,230,118,.2); }
-  .sec-badge.warn { background: rgba(255,193,7,.1); color: var(--yellow); border: 1px solid rgba(255,193,7,.2); }
+.filter-group {
+  display: flex; gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 5px; padding: 3px;
+}
+.filter-btn {
+  padding: 4px 11px; border-radius: 3px; border: none;
+  background: transparent; color: var(--text2);
+  font-size: 11px; font-weight: 600;
+  font-family: 'Inter', sans-serif; cursor: pointer;
+  transition: all .12s; white-space: nowrap;
+}
+.filter-btn:hover { color: var(--text) }
+.filter-btn.active {
+  background: var(--accent-glow); color: var(--accent);
+  border: 1px solid rgba(0,200,240,.25);
+}
 
-  /* BOT CONTROL */
-  .btn-start { width: 100%; padding: 12px; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: .2s; margin-bottom: 8px; }
-  .btn-start.start { background: var(--green); color: #000; }
-  .btn-start.start:hover { background: var(--green2); }
-  .btn-start.stop { background: var(--red); color: #fff; }
-  .btn-start.stop:hover { background: #e0001f; }
+/* sound button */
+.sound-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 4px;
+  border: 1px solid var(--border2); background: transparent;
+  color: var(--text2); font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer; transition: all .12s; white-space: nowrap;
+}
+.sound-btn:hover { color: var(--accent); border-color: rgba(0,200,240,.4) }
+.sound-btn.on { color: var(--green); border-color: rgba(0,224,153,.35) }
 
-  /* OPPORTUNITY LIST */
-  .opp-list { flex: 1; overflow-y: auto; }
-  .opp-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
-  .opp-item:hover { background: var(--bg3); }
-  .opp-item.selected { background: var(--bg4); border-left: 2px solid var(--green); }
-  .opp-item.danger { border-left: 2px solid var(--red); opacity: .5; cursor: not-allowed; }
-  .opp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .opp-name { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
-  .opp-score { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
-  .opp-score.high { background: rgba(0,230,118,.15); color: var(--green); }
-  .opp-score.med { background: rgba(255,193,7,.15); color: var(--yellow); }
-  .opp-score.low { background: rgba(255,61,87,.15); color: var(--red); }
-  .opp-meta { display: flex; gap: 12px; }
-  .opp-meta-item { font-size: 10px; color: var(--text3); }
-  .opp-meta-item span { color: var(--text2); }
-  .risk-tag { font-size: 9px; padding: 1px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 1px; }
-  .risk-tag.safe { background: rgba(0,230,118,.12); color: var(--green); }
-  .risk-tag.warn { background: rgba(255,193,7,.12); color: var(--yellow); }
-  .risk-tag.danger { background: rgba(255,61,87,.12); color: var(--red); }
+/* refresh button */
+.refresh-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 4px;
+  border: 1px solid var(--border2); background: transparent;
+  color: var(--text2); font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer; transition: all .12s; white-space: nowrap;
+}
+.refresh-btn:hover { border-color: var(--accent); color: var(--accent) }
+.refresh-btn.spinning svg { animation: spin .7s linear infinite }
+@keyframes spin { to { transform: rotate(360deg) } }
 
-  /* CHART AREA */
-  .chart-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; background: var(--bg2); }
-  .chart-token { font-size: 14px; font-weight: 700; }
-  .chart-price { font-size: 13px; color: var(--text2); }
-  .chart-change { font-size: 12px; font-weight: 700; }
-  .chart-change.pos { color: var(--green); }
-  .chart-change.neg { color: var(--red); }
-  .indicators { display: flex; gap: 10px; margin-left: auto; }
-  .ind-chip { font-size: 10px; padding: 3px 8px; border-radius: 4px; background: var(--bg4); border: 1px solid var(--border); }
-  .ind-chip.bull { border-color: var(--green); color: var(--green); }
-  .ind-chip.bear { border-color: var(--red); color: var(--red); }
-  .ind-chip.neutral { border-color: var(--yellow); color: var(--yellow); }
-  canvas.chart-canvas { width: 100%; height: 200px; display: block; }
+/* ── STATS STRIP ── */
+.stats-strip {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; scrollbar-width: none;
+}
+.stats-strip::-webkit-scrollbar { display: none }
+.stat-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 18px 7px 0;
+  border-right: 1px solid var(--border);
+  margin-right: 18px; min-width: max-content;
+}
+.stat-item:last-child { border-right: none }
+.stat-label {
+  font-size: 9px; font-weight: 600;
+  letter-spacing: .8px; text-transform: uppercase;
+  color: var(--muted);
+}
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.stat-value.accent { color: var(--accent) }
+.stat-value.green  { color: var(--green) }
+.stat-value.red    { color: var(--red) }
 
-  /* TRADE LOG */
-  .log-area { border-top: 1px solid var(--border); height: 180px; overflow-y: auto; background: var(--bg); }
-  .log-entry { padding: 5px 16px; font-size: 11px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
-  .log-time { color: var(--text3); min-width: 60px; }
-  .log-type { font-weight: 700; min-width: 40px; }
-  .log-type.BUY { color: var(--green); }
-  .log-type.SELL { color: var(--red); }
-  .log-type.SKIP { color: var(--text3); }
-  .log-type.WARN { color: var(--yellow); }
-  .log-type.INFO { color: var(--blue); }
-  .log-msg { color: var(--text2); flex: 1; }
-  .log-pnl { font-weight: 700; min-width: 60px; text-align: right; }
-  .log-pnl.pos { color: var(--green); }
-  .log-pnl.neg { color: var(--red); }
+/* source badges */
+.src-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px; border-radius: 2px;
+  font-size: 9px; font-weight: 700; letter-spacing: .3px;
+  margin-right: 4px;
+}
+.src-ok  { background: var(--green-dim); color: var(--green) }
+.src-err { background: var(--red-dim);   color: var(--red)   }
+.src-ini { background: var(--surface2);  color: var(--muted) }
 
-  /* OPEN POSITIONS */
-  .positions { padding: 0 16px; }
-  .pos-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-  .pos-token { font-size: 12px; font-weight: 700; min-width: 60px; }
-  .pos-bar-wrap { flex: 1; }
-  .pos-bar-bg { background: var(--bg4); border-radius: 3px; height: 4px; position: relative; }
-  .pos-bar { height: 4px; border-radius: 3px; transition: width .5s; }
-  .pos-bar.profit { background: var(--green); }
-  .pos-bar.loss { background: var(--red); }
-  .pos-pnl { font-size: 12px; font-weight: 700; min-width: 70px; text-align: right; }
-  .pos-pnl.pos { color: var(--green); }
-  .pos-pnl.neg { color: var(--red); }
+/* ── TABLE ── */
+.table-wrap { overflow-x: auto; padding-bottom: 40px }
+.table-wrap::-webkit-scrollbar { height: 4px }
+.table-wrap::-webkit-scrollbar-track { background: var(--surface) }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px }
 
-  /* ALERTS */
-  .alert-box { margin: 8px 16px; padding: 8px 12px; border-radius: 6px; font-size: 11px; border-left: 3px solid; }
-  .alert-box.warn { background: rgba(255,193,7,.08); border-color: var(--yellow); color: var(--yellow); }
-  .alert-box.danger { background: rgba(255,61,87,.08); border-color: var(--red); color: var(--red); }
-  .alert-box.info { background: rgba(68,138,255,.08); border-color: var(--blue); color: var(--blue); }
+table { width: 100%; min-width: 1020px; border-collapse: collapse }
 
-  /* PROFIT VAULT */
-  .vault-chip { background: rgba(179,136,255,.1); border: 1px solid rgba(179,136,255,.3); border-radius: 6px; padding: 8px 12px; font-size: 11px; }
-  .vault-val { font-size: 16px; font-weight: 700; color: var(--purple); }
+thead th {
+  padding: 6px 10px; text-align: left;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: .8px; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+  white-space: nowrap; cursor: pointer; user-select: none;
+  background: var(--bg);
+}
+thead th:hover { color: var(--text2) }
+thead th.sort-active { color: var(--accent) }
+thead th .sa { margin-left: 3px; opacity: .7 }
 
-  /* MODAL */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 200; display: flex; align-items: center; justify-content: center; display: none; }
-  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 24px; width: 420px; max-width: 95vw; }
-  .modal h3 { font-size: 15px; color: var(--green); margin-bottom: 16px; letter-spacing: 2px; }
-  .modal-warn { background: rgba(255,61,87,.1); border: 1px solid var(--red); border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 11px; color: var(--red); line-height: 1.6; }
-  .modal-input { width: 100%; background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'SF Mono', monospace; font-size: 12px; padding: 10px 12px; margin-bottom: 12px; }
-  .modal-input:focus { outline: none; border-color: var(--green); }
-  .modal-btns { display: flex; gap: 8px; }
-  .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; letter-spacing: 1px; }
-  .modal-btn.confirm { background: var(--green); color: #000; }
-  .modal-btn.cancel { background: var(--bg4); color: var(--text2); border: 1px solid var(--border); }
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .08s; cursor: pointer;
+}
+tbody tr:hover { background: var(--surface2) }
 
-  /* SCROLLBAR */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+/* new pair flash */
+tbody tr.flash-new { animation: rowFlash .9s ease forwards }
+@keyframes rowFlash {
+  0%   { background: rgba(0,200,240,.09) }
+  100% { background: transparent }
+}
+/* whale flash (high liq) */
+tbody tr.flash-whale { animation: whaleFlash 1.2s ease forwards }
+@keyframes whaleFlash {
+  0%   { background: rgba(255,196,0,.12) }
+  100% { background: transparent }
+}
 
-  /* RESPONSIVE */
-  @media (max-width: 768px) {
-    .main { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; height: auto; }
-    .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 400px; }
-    .stats-row { grid-template-columns: repeat(2, 1fr); }
-  }
+td {
+  padding: 7px 10px; vertical-align: middle;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
+/* token */
+.td-token { min-width: 0; max-width: 180px }
+.tok-sym {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 12px; color: var(--text);
+}
+.tok-sep {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--muted); margin-left: 3px;
+}
+.tok-addr {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; color: var(--muted);
+}
+
+/* badges */
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 6px; border-radius: 3px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase;
+  font-family: 'Inter', sans-serif;
+}
+.b-dlmm  { background: var(--purple-dim); border: 1px solid rgba(167,139,250,.3); color: var(--purple) }
+.b-dlmm2 { background: var(--accent-glow); border: 1px solid rgba(0,200,240,.3); color: var(--accent) }
+.b-new   {
+  background: rgba(255,196,0,.12); border: 1px solid rgba(255,196,0,.3);
+  color: var(--yellow); margin-left: 4px; font-size: 8px;
+}
+
+td.price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 500; color: var(--text);
+}
+td.pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600; text-align: right;
+}
+td.pct.up   { color: var(--green) }
+td.pct.down { color: var(--red) }
+td.pct.flat { color: var(--muted) }
+
+td.txns {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; text-align: right;
+}
+.txb { color: var(--green) }
+.txs { color: var(--red) }
+.txd { color: var(--muted) }
+
+td.vol, td.liq {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text2); text-align: right;
+}
+td.age {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; text-align: right;
+}
+td.age.fresh  { color: var(--yellow) }
+td.age.recent { color: var(--text2) }
+td.age.old    { color: var(--muted) }
+td.num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--muted); text-align: right; width: 34px;
+}
+
+.link-row { display: flex; gap: 3px; align-items: center }
+.ext-link {
+  display: inline-flex; align-items: center;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid var(--border2); background: transparent;
+  color: var(--muted); font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 600;
+  text-decoration: none; transition: all .1s; letter-spacing: .3px;
+}
+.ext-link:hover { color: var(--accent); border-color: rgba(0,200,240,.4) }
+
+/* state rows */
+.state-row td {
+  text-align: center; padding: 52px 20px;
+  color: var(--muted); font-family: 'Inter', sans-serif;
+}
+.si {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .65s linear infinite;
+  vertical-align: -2px; margin-right: 8px;
+}
+.err-state { display: flex; flex-direction: column; align-items: center; gap: 10px }
+.err-title { color: var(--red); font-size: 14px; font-weight: 600 }
+.err-detail { color: var(--muted); font-size: 11px }
+.err-sources { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center }
+
+/* scrollbar */
+::-webkit-scrollbar       { width: 4px; height: 4px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px }
 </style>
-<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-</head>
-<body>
 
-<!-- HEADER -->
-<div class="header">
-  <div class="logo">
-    <div class="logo-icon">⚡</div>
-    <div>
-      <div class="logo-text">QUANTUM SCALP</div>
-      <div class="logo-sub">SOLANA AUTONOMOUS BOT</div>
-    </div>
-  </div>
-  <div class="header-right">
-    <div class="status-dot" id="status-dot"></div>
-    <div class="status-text" id="status-text">OFFLINE</div>
-  </div>
-</div>
+<!-- ═══════════════════════════════ HEADER ═══════════════════════════════ -->
+<header class="header">
+  <div class="header-inner">
 
-<!-- WALLET BAR -->
-<div class="wallet-bar">
-  <div id="wallet-section">
-    <button class="btn-connect" id="btn-connect" onclick="connectWallet()">⬡ CONECTAR CARTEIRA</button>
-  </div>
-  <div class="balance-chip" id="sol-balance" style="display:none">
-    <div>
-      <div class="balance-val" id="sol-val">0.00</div>
-      <div class="balance-label">SOL</div>
-    </div>
-  </div>
-  <div class="balance-chip" id="usdc-balance" style="display:none">
-    <div>
-      <div class="balance-val" id="usdc-val">$0.00</div>
-      <div class="balance-label">USDC</div>
-    </div>
-  </div>
-  <div class="vault-chip" id="vault-chip" style="display:none; margin-left:auto">
-    <div style="font-size:9px; color:var(--text3); letter-spacing:2px; margin-bottom:2px">COFRE DE LUCROS</div>
-    <div class="vault-val" id="vault-val">$0.00</div>
-  </div>
-</div>
-
-<!-- STATS ROW -->
-<div class="stats-row">
-  <div class="stat-card">
-    <div class="stat-label">P&L TOTAL</div>
-    <div class="stat-val green" id="stat-pnl">+$0.00</div>
-    <div class="stat-sub" id="stat-pnl-pct">0.00%</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">TRADES HOJE</div>
-    <div class="stat-val" id="stat-trades">0</div>
-    <div class="stat-sub" id="stat-winrate">Win: 0%</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">EM POSIÇÃO</div>
-    <div class="stat-val yellow" id="stat-positions">0</div>
-    <div class="stat-sub">tokens ativos</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">TOKENS ANALISADOS</div>
-    <div class="stat-val" id="stat-analyzed">0</div>
-    <div class="stat-sub" id="stat-rejected">Rejeitados: 0</div>
-  </div>
-</div>
-
-<!-- MAIN LAYOUT -->
-<div class="main">
-
-  <!-- SIDEBAR -->
-  <div class="sidebar">
-
-    <!-- BOT CONTROL -->
-    <div class="section">
-      <div class="section-title">CONTROLE</div>
-      <button class="btn-start start" id="btn-bot" onclick="toggleBot()">▶ INICIAR BOT</button>
-
-      <div class="alert-box warn" id="key-warning">
-        ⚠ Conecte uma carteira (Phantom/Trust Wallet) antes de iniciar.
-      </div>
-      <div class="alert-box danger" style="margin-left:0; margin-right:0">
-        ⚠ RISCO REAL: a maioria dos memecoins vai a zero, rugs e bundles são comuns, e o tempo médio de hold em Solana é de segundos. Opere só com o valor que você aceita perder por completo. Isto não é aconselhamento financeiro.
-      </div>
+    <div class="logo">
+      <svg viewBox="0 0 28 28" fill="none">
+        <rect width="28" height="28" rx="6" fill="rgba(0,200,240,.08)" stroke="rgba(0,200,240,.25)" stroke-width="1"/>
+        <polyline points="5,21 10,11 15,16 19,8" stroke="#00c8f0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="19" cy="8" r="1.8" fill="#00c8f0"/>
+        <path d="M5 21h18" stroke="#1a2840" stroke-width="1"/>
+      </svg>
+      METEORA <span class="logo-hi">SCANNER</span>
     </div>
 
-    <!-- PARAMS -->
-    <div class="section">
-      <div class="section-title">PARÂMETROS</div>
-      <div class="param-row">
-        <div class="param-label">Valor por trade (SOL)</div>
-        <input class="param-input" type="number" id="trade-size" value="0.05" step="0.01" min="0.01">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Take Profit %</div>
-        <input class="param-input" type="number" id="take-profit" value="15" step="1" min="5">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Stop Loss %</div>
-        <input class="param-input" type="number" id="stop-loss" value="7" step="1" min="2">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Trailing Stop %</div>
-        <input class="param-input" type="number" id="trailing" value="5" step="1" min="2">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Max posições simultâneas</div>
-        <input class="param-input" type="number" id="max-pos" value="3" step="1" min="1" max="10">
-      </div>
-      <div class="param-row">
-        <div class="param-label">% lucro para cofre</div>
-        <input class="param-input" type="number" id="vault-pct" value="20" step="5" min="0" max="100">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Slippage máx %</div>
-        <input class="param-input" type="number" id="slippage" value="3" step="0.5" min="0.5">
-      </div>
+    <div class="live-pill">
+      <div class="live-dot"></div>LIVE
     </div>
 
-    <!-- FILTROS DE ENTRADA -->
-    <div class="section">
-      <div class="section-title">FILTROS DE ENTRADA</div>
-      <div class="param-row">
-        <div class="param-label">RSI mínimo</div>
-        <input class="param-input" type="number" id="rsi-min" value="45" step="5">
-      </div>
-      <div class="param-row">
-        <div class="param-label">RSI máximo</div>
-        <input class="param-input" type="number" id="rsi-max" value="65" step="5">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Liquidez mínima ($)</div>
-        <input class="param-input" type="number" id="min-liq" value="10000" step="1000">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Idade mín. pool (min)</div>
-        <input class="param-input" type="number" id="min-age" value="10" step="5">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Score mínimo</div>
-        <input class="param-input" type="number" id="min-score" value="70" step="5">
-      </div>
+    <div class="spacer"></div>
+
+    <div class="filter-group">
+      <button class="filter-btn active" data-filter="all">Todos</button>
+      <button class="filter-btn" data-filter="dlmm">DLMM</button>
+      <button class="filter-btn" data-filter="dlmm2">DLMM v2</button>
     </div>
 
-    <!-- FILTROS ESTILO INSENTOS (manual TERMINAL/GMGN) -->
-    <div class="section">
-      <div class="section-title">FILTRO INSENTOS (100x)</div>
-      <div style="font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.5">
-        Faixas de market cap por estágio, do manual TERMINAL/Trenches. "Global Fees Paid" e "Top 10 Holders %" do manual não são aplicados aqui — precisam de uma API extra (ex. Birdeye/Helius) que este app ainda não integra.
-      </div>
-      <div class="param-row">
-        <div class="param-label">Market Cap mínimo ($)</div>
-        <input class="param-input" type="number" id="mcap-min" value="4000" step="1000">
-      </div>
-      <div class="param-row">
-        <div class="param-label">Market Cap máximo ($)</div>
-        <input class="param-input" type="number" id="mcap-max" value="0" step="5000" title="0 = sem limite">
-      </div>
-    </div>
+    <button class="sound-btn" id="soundBtn" title="Ativar / desativar alertas sonoros">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <path id="speakerPath" d="M2 5.5h3L8 3v10l-3-2.5H2V5.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        <path id="wave1" d="M10 5.5c.8.6 1.3 1.5 1.3 2.5s-.5 1.9-1.3 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path id="wave2" d="M12 3.5c1.4 1.1 2.2 2.7 2.2 4.5s-.8 3.4-2.2 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <span id="soundLabel">SOM OFF</span>
+    </button>
 
-    <!-- SEGURANÇA -->
-    <div class="section">
-      <div class="section-title">PROTEÇÕES ATIVAS</div>
-      <div>
-        <span class="sec-badge active">✓ Anti-Rug</span>
-        <span class="sec-badge active">✓ Anti-Honeypot</span>
-        <span class="sec-badge active">✓ Anti-Dump</span>
-        <span class="sec-badge active">✓ P&D Detector</span>
-        <span class="sec-badge active">✓ Liq. Lock Check</span>
-        <span class="sec-badge active">✓ Candle Pattern</span>
-        <span class="sec-badge active">✓ Holder Check</span>
-        <span class="sec-badge active">✓ Volume Fake</span>
-      </div>
-    </div>
-
-    <!-- CARTEIRA -->
-    <div class="section">
-      <div class="section-title">CARTEIRA DO BOT</div>
-      <div style="font-size:10px; color:var(--text3); margin-bottom:8px; line-height:1.5">
-        Conecte pela Phantom ou Trust Wallet no topo da tela — a carteira assina cada transação, sua chave privada nunca passa por este app. Use uma carteira dedicada, separada da sua principal, com apenas o valor que você aceita perder.
-      </div>
-      <div class="param-label" style="margin-bottom:4px">RPC endpoint</div>
-      <input class="param-input" type="text" id="rpc-endpoint" value="https://solana-rpc.publicnode.com" style="width:100%; margin-bottom:6px">
-      <div style="font-size:9px; color:var(--text3); margin-bottom:8px; line-height:1.4">
-        O RPC público da Solana (api.mainnet-beta.solana.com) bloqueia chamadas de navegador. Pra confiabilidade real, crie um RPC grátis em helius.dev ou quicknode.com e cole a URL aqui.
-      </div>
-      <div class="param-label" style="margin-bottom:4px">Jupiter API key (opcional)</div>
-      <input class="param-input" type="password" id="jupiter-key" placeholder="deixe vazio pra usar o tier grátis" style="width:100%; margin-bottom:6px">
-      <div style="font-size:9px; color:var(--text3); margin-bottom:8px; line-height:1.4">
-        Hoje usa o endpoint grátis lite-api.jup.ag. Se a Jupiter exigir chave (eles vêm migrando todo mundo pra isso), gere uma de graça em portal.jup.ag e cole aqui.
-      </div>
-      <button class="btn-start start" style="padding:8px; font-size:11px" onclick="testConnection()">🔌 TESTAR CONEXÃO</button>
-    </div>
-
-    <!-- CONFIRMAÇÃO -->
-    <div class="section">
-      <div class="section-title">EXECUÇÃO</div>
-      <div class="param-row">
-        <div class="param-label" title="Recomendado: mantenha ligado. O manual do Insentos recomenda exigir confirmação antes de cada trade.">Confirmar cada compra</div>
-        <input type="checkbox" id="require-confirm" checked style="width:18px; height:18px">
-      </div>
-      <div class="param-row">
-        <div class="param-label" title="Se desligado, quando a busca de tokens falhar o bot mostra um erro em vez de dados fictícios">Modo demo se API falhar</div>
-        <input type="checkbox" id="allow-demo" style="width:18px; height:18px">
-      </div>
-    </div>
+    <button class="refresh-btn" id="refreshBtn">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M10.5 6A4.5 4.5 0 1 1 8.25 2.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <polyline points="8.25,1 8.25,2.8 10,2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="timerLabel">—</span>
+    </button>
 
   </div>
+</header>
 
-  <!-- CONTENT AREA -->
-  <div class="content">
-
-    <!-- OPORTUNIDADES + GRAFICO -->
-    <div style="display:flex; flex:1; overflow:hidden; flex-direction:column">
-
-      <!-- TABS / CHART -->
-      <div class="chart-header" id="chart-header">
-        <div>
-          <div class="chart-token" id="chart-token">Aguardando scan...</div>
-          <div class="chart-price" id="chart-price">-</div>
-        </div>
-        <div class="chart-change" id="chart-change"></div>
-        <div class="indicators" id="indicators"></div>
-      </div>
-
-      <!-- CANVAS CHART -->
-      <div style="background:var(--bg); padding:8px 16px; border-bottom:1px solid var(--border)">
-        <canvas id="chart-canvas" height="160" style="width:100%; height:160px"></canvas>
-      </div>
-
-      <!-- OPORTUNIDADES -->
-      <div style="padding:8px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px">
-        OPORTUNIDADES DETECTADAS
-        <span id="scan-status" style="color:var(--text3)">—</span>
-      </div>
-
-      <div class="opp-list" id="opp-list" style="flex:1; max-height:220px; overflow-y:auto">
-        <div style="padding:30px; text-align:center; color:var(--text3)">
-          Inicie o bot para começar a análise...
-        </div>
-      </div>
-
-      <!-- POSIÇÕES ABERTAS -->
-      <div style="padding:8px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border)">
-        POSIÇÕES ABERTAS
-      </div>
-      <div id="positions-area" class="positions" style="min-height:50px; background:var(--bg2)">
-        <div style="padding:12px 0; color:var(--text3); font-size:11px">Nenhuma posição aberta.</div>
-      </div>
-
-      <!-- TRADE LOG -->
-      <div style="padding:6px 16px; font-size:9px; color:var(--text3); letter-spacing:3px; background:var(--bg2); border-top:1px solid var(--border)">
-        TRADE LOG
-      </div>
-      <div class="log-area" id="log-area">
-        <div class="log-entry">
-          <span class="log-time">--:--:--</span>
-          <span class="log-type INFO">INFO</span>
-          <span class="log-msg">Sistema iniciado. Configure a carteira e inicie o bot.</span>
-        </div>
-      </div>
-
-    </div>
+<!-- ══════════════════════════════ STATS STRIP ═══════════════════════════ -->
+<div class="stats-strip">
+  <div class="stat-item">
+    <span class="stat-label">Pares</span>
+    <span class="stat-value accent" id="sPairs">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">DLMM</span>
+    <span class="stat-value" id="sDlmm">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">DLMM v2</span>
+    <span class="stat-value" id="sDlmm2">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Novos detectados</span>
+    <span class="stat-value green" id="sNew">0</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Vol 24h</span>
+    <span class="stat-value" id="sVol">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Liquidez total</span>
+    <span class="stat-value" id="sLiq">—</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Fontes</span>
+    <span class="stat-value" id="sSrc" style="font-size:11px">
+      <span class="src-badge src-ini" id="srcGT">GT —</span>
+      <span class="src-badge src-ini" id="srcDS">DS —</span>
+    </span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">Atualizado</span>
+    <span class="stat-value" id="sTime">—</span>
   </div>
 </div>
 
-<!-- MODAL: NENHUMA CARTEIRA DETECTADA -->
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal">
-    <h3>⚠ NENHUMA CARTEIRA DETECTADA</h3>
-    <div class="modal-warn">
-      Instale a extensão da Phantom ou da Trust Wallet no seu navegador e recarregue esta página. O bot assina as transações através da carteira — sua chave privada nunca é digitada aqui, o que evita roubo por script malicioso ou extensão comprometida.
-    </div>
-    <div style="display:flex; flex-direction:column; gap:8px; margin:10px 0">
-      <a href="https://phantom.app/download" target="_blank" class="btn-start start" style="text-align:center; text-decoration:none">⬡ Instalar Phantom</a>
-      <a href="https://trustwallet.com/download" target="_blank" class="btn-start start" style="text-align:center; text-decoration:none">⬡ Instalar Trust Wallet</a>
-    </div>
-    <div class="modal-btns">
-      <button class="modal-btn cancel" onclick="closeModal()">FECHAR</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: ESCOLHER CARTEIRA -->
-<div class="modal-overlay" id="wallet-picker-overlay">
-  <div class="modal">
-    <h3>⬡ ESCOLHER CARTEIRA</h3>
-    <div id="wallet-picker-list"></div>
-    <div class="modal-btns">
-      <button class="modal-btn cancel" onclick="closeWalletPicker()">CANCELAR</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: CONFIRMAR COMPRA (real, on-chain) -->
-<div class="modal-overlay" id="confirm-buy-overlay">
-  <div class="modal">
-    <h3>⚠ CONFIRMAR COMPRA REAL</h3>
-    <div class="modal-warn" id="confirm-buy-details">Carregando cotação...</div>
-    <div class="modal-btns">
-      <button class="modal-btn cancel" onclick="cancelPendingBuy()">CANCELAR</button>
-      <button class="modal-btn confirm" onclick="confirmPendingBuy()">CONFIRMAR COMPRA</button>
-    </div>
-  </div>
+<!-- ═══════════════════════════════ TABLE ════════════════════════════════ -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th data-sort="symbol">Token</th>
+        <th>Tipo</th>
+        <th data-sort="price" style="text-align:right">Preço</th>
+        <th data-sort="m5"  style="text-align:right">5m</th>
+        <th data-sort="h1"  style="text-align:right">1h</th>
+        <th data-sort="h6"  style="text-align:right">6h</th>
+        <th data-sort="h24" style="text-align:right">24h</th>
+        <th data-sort="txns" style="text-align:right">Txns 1h</th>
+        <th data-sort="vol" style="text-align:right">Vol 24h</th>
+        <th data-sort="liq" style="text-align:right">Liquidez</th>
+        <th data-sort="age" style="text-align:right">Idade</th>
+        <th>Links</th>
+      </tr>
+    </thead>
+    <tbody id="tbody">
+      <tr class="state-row">
+        <td colspan="13"><span class="si"></span>Conectando às fontes de dados…</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 <script>
-// ============================================================
-// QUANTUM SCALP BOT - SOLANA AUTONOMOUS TRADING
-// ============================================================
+'use strict';
 
-// quote-api.jup.ag/v6 foi desativada pela Jupiter em out/2025. Usando o endpoint gratuito atual (lite-api).
-// Se a Jupiter desativar este também, gere uma chave grátis em portal.jup.ag e preencha o campo na sidebar.
-const JUPITER_API = 'https://lite-api.jup.ag/swap/v1';
-function jupiterHeaders() {
-  const key = document.getElementById('jupiter-key')?.value?.trim();
-  return key ? { 'Content-Type': 'application/json', 'x-api-key': key } : { 'Content-Type': 'application/json' };
-}
-const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex';
-const RPC_ENDPOINT_DEFAULT = 'https://solana-rpc.publicnode.com';
-function getRpcEndpoint() {
-  return document.getElementById('rpc-endpoint')?.value?.trim() || RPC_ENDPOINT_DEFAULT;
-}
-const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+/* ═══════════════════════════════════════════════════════════
+   SOUND ENGINE — Web Audio API, RocketScan style
+   Needs a user gesture before AudioContext unlocks.
+   ═══════════════════════════════════════════════════════════ */
+const Sound = (() => {
+  let ctx = null;
+  let enabled = false;
 
-let botRunning = false;
-let wallet = null;
-let keypair = null;
-let positions = {};
-let tradeLog = [];
-let stats = { pnl: 0, trades: 0, wins: 0, analyzed: 0, rejected: 0, vault: 0 };
-let opportunities = [];
-let scanInterval = null;
-let monitorInterval = null;
-let chartData = [];
-let selectedToken = null;
-
-// ============================================================
-// WALLET CONNECTION (Wallet Standard: Phantom, Trust Wallet, Solflare, Backpack...)
-// ============================================================
-let activeProvider = null;
-let detectedWallets = [];
-
-// Coleta carteiras via Wallet Standard (window.navigator.wallets) + fallback para injeções conhecidas.
-function detectWallets() {
-  const found = [];
-  const seen = new Set();
-
-  function add(name, provider, icon) {
-    if (!provider || seen.has(name)) return;
-    seen.add(name);
-    found.push({ name, provider, icon: icon || '◈' });
+  function init() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
   }
 
-  // Wallet Standard (padrão moderno - Trust Wallet, Backpack, Solflare, Phantom mobile etc usam isso)
-  try {
-    const registered = window.navigator?.wallets?.get?.() || window.__solanaWalletStandard || [];
-    (registered || []).forEach(w => {
-      if (w?.chains?.some?.(c => c.startsWith('solana'))) {
-        add(w.name, w, w.icon);
-      }
-    });
-  } catch (e) { /* wallet standard não disponível */ }
-
-  // Fallback: injeções diretas conhecidas
-  add('Phantom', window.phantom?.solana || (window.solana?.isPhantom ? window.solana : null));
-  add('Trust Wallet', window.trustwallet?.solana || (window.solana?.isTrust ? window.solana : null));
-  add('Solflare', window.solflare);
-  add('Backpack', window.backpack);
-  add('Coinbase Wallet', window.coinbaseSolana);
-  if (window.solana && !found.some(w => w.provider === window.solana)) add('Solana Wallet', window.solana);
-
-  detectedWallets = found;
-  return found;
-}
-
-async function connectWallet() {
-  const wallets = detectWallets();
-  if (wallets.length === 0) {
-    addLog('WARN', 'Nenhuma carteira detectada. Instale Phantom ou Trust Wallet (extensão) e recarregue a página.');
-    document.getElementById('modal-overlay').style.display = 'flex';
-    return;
+  function tone(freq, vol, start, dur) {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(vol, start + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    osc.start(start); osc.stop(start + dur + 0.01);
   }
-  if (wallets.length === 1) {
-    await connectToProvider(wallets[0]);
-    return;
-  }
-  // Múltiplas carteiras detectadas — deixa o usuário escolher
-  showWalletPicker(wallets);
-}
-
-function showWalletPicker(wallets) {
-  const list = wallets.map((w, i) =>
-    `<button class="btn-start start" style="width:100%; margin-bottom:6px; text-align:left" onclick="connectToProvider(detectedWallets[${i}])">${w.icon} ${w.name}</button>`
-  ).join('');
-  document.getElementById('wallet-picker-list').innerHTML = list;
-  document.getElementById('wallet-picker-overlay').style.display = 'flex';
-}
-
-function closeWalletPicker() { document.getElementById('wallet-picker-overlay').style.display = 'none'; }
-
-async function connectToProvider(w) {
-  closeWalletPicker();
-  try {
-    const provider = w.provider;
-    let pubkey;
-    if (provider.connect) {
-      const resp = await provider.connect();
-      pubkey = resp?.publicKey?.toString?.() || provider.publicKey?.toString?.();
-    } else {
-      pubkey = provider.publicKey?.toString?.();
-    }
-    if (!pubkey) throw new Error('Não foi possível obter o endereço público.');
-    wallet = pubkey;
-    activeProvider = provider;
-    document.getElementById('wallet-section').innerHTML = `
-      <div class="wallet-info">
-        <div class="wallet-addr" onclick="copyAddr()" title="Clique para copiar">⬡ ${w.name}: ${wallet.slice(0,6)}...${wallet.slice(-4)}</div>
-        <button class="btn-connect red" onclick="disconnectWallet()">DESCONECTAR</button>
-      </div>`;
-    await fetchBalances();
-    addLog('INFO', `${w.name} conectada: ${wallet.slice(0,8)}...`);
-    document.getElementById('key-warning').style.display = 'none';
-    document.getElementById('sol-balance').style.display = 'flex';
-    document.getElementById('vault-chip').style.display = 'flex';
-  } catch (e) {
-    addLog('WARN', `Erro ao conectar ${w.name}: ` + e.message);
-  }
-}
-
-function disconnectWallet() {
-  try { activeProvider?.disconnect?.(); } catch (e) {}
-  wallet = null;
-  keypair = null;
-  activeProvider = null;
-  document.getElementById('wallet-section').innerHTML = `<button class="btn-connect" id="btn-connect" onclick="connectWallet()">⬡ CONECTAR CARTEIRA</button>`;
-  document.getElementById('sol-balance').style.display = 'none';
-  document.getElementById('usdc-balance').style.display = 'none';
-  document.getElementById('vault-chip').style.display = 'none';
-  addLog('INFO', 'Carteira desconectada.');
-}
-
-function copyAddr() {
-  if(wallet) { navigator.clipboard.writeText(wallet); addLog('INFO', 'Endereço copiado.'); }
-}
-
-async function fetchBalances() {
-  if (!wallet) return;
-  try {
-    const res = await fetch(getRpcEndpoint(), {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance', params:[wallet] })
-    });
-    if (!res.ok) throw new Error(`RPC retornou ${res.status} (${res.statusText}) — troque o RPC endpoint`);
-    const data = await res.json();
-    if (data.error) throw new Error('RPC: ' + data.error.message);
-    const sol = (data.result?.value ?? null);
-    if (sol === null) throw new Error('RPC não retornou saldo — verifique o endpoint');
-    document.getElementById('sol-val').textContent = (sol / 1e9).toFixed(4);
-    document.getElementById('sol-balance').style.display = 'flex';
-  } catch(e) {
-    addLog('WARN', 'Falha ao buscar saldo: ' + e.message);
-  }
-}
-
-// Testa cada etapa do pipeline separadamente e mostra o resultado real no log
-async function testConnection() {
-  addLog('INFO', '— Iniciando teste de conexão —');
-
-  // 1. Carteira
-  if (!wallet || !activeProvider) {
-    addLog('WARN', '❌ Carteira: não conectada.');
-  } else {
-    addLog('INFO', `✅ Carteira conectada: ${wallet.slice(0,8)}...`);
-  }
-
-  // 2. RPC
-  try {
-    const res = await fetch(getRpcEndpoint(), {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getHealth' })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
-    addLog('INFO', `✅ RPC (${getRpcEndpoint()}) respondendo.`);
-  } catch (e) {
-    addLog('WARN', `❌ RPC falhou: ${e.message}. Troque o RPC endpoint (helius.dev / quicknode.com têm plano grátis).`);
-  }
-
-  // 3. Saldo real
-  if (wallet) await fetchBalances();
-
-  // 4. DexScreener (fonte dos tokens escaneados)
-  try {
-    const res = await fetch(`${DEXSCREENER_API}/search?q=solana`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const n = (data.pairs || []).filter(p => p.chainId === 'solana').length;
-    if (n === 0) throw new Error('resposta vazia');
-    addLog('INFO', `✅ DexScreener OK — ${n} pares Solana retornados. Os tokens escaneados são reais.`);
-  } catch (e) {
-    addLog('WARN', `❌ DexScreener falhou: ${e.message}. Sem isso, o scan não tem dados reais.`);
-  }
-
-  // 5. Jupiter (necessário pra comprar/vender de verdade)
-  try {
-    const res = await fetch(`${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=100000000&slippageBps=50`, { headers: jupiterHeaders() });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (!data.outAmount) throw new Error('sem rota retornada');
-    addLog('INFO', '✅ Jupiter OK — cotações e swaps devem funcionar.');
-  } catch (e) {
-    addLog('WARN', `❌ Jupiter falhou: ${e.message}. Sem isso, o bot não consegue comprar/vender de verdade.`);
-  }
-
-  addLog('INFO', '— Teste concluído. Veja os itens ❌ acima — são eles que estão impedindo o bot de operar de verdade. —');
-}
-
-// ============================================================
-// MODAIS
-// ============================================================
-function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-
-function base58Decode(str) {
-  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  const map = {};
-  for(let i=0;i<ALPHABET.length;i++) map[ALPHABET[i]]=i;
-  let num = BigInt(0);
-  for(const c of str) { if(!(c in map)) throw new Error('Invalid char'); num = num*58n + BigInt(map[c]); }
-  const hex = num.toString(16).padStart(64,'0');
-  const bytes = new Uint8Array(hex.length/2);
-  for(let i=0;i<bytes.length;i++) bytes[i]=parseInt(hex.slice(i*2,i*2+2),16);
-  return bytes;
-}
-
-// ============================================================
-// BOT CONTROL
-// ============================================================
-function toggleBot() {
-  if (!wallet || !activeProvider) {
-    addLog('WARN', 'Conecte uma carteira (Phantom ou Trust Wallet) antes de iniciar.');
-    document.getElementById('modal-overlay').style.display = 'flex';
-    return;
-  }
-  if (botRunning) stopBot(); else startBot();
-}
-
-function startBot() {
-  botRunning = true;
-  document.getElementById('btn-bot').className = 'btn-start stop';
-  document.getElementById('btn-bot').textContent = '⏹ PARAR BOT';
-  document.getElementById('status-dot').className = 'status-dot on';
-  document.getElementById('status-text').textContent = 'RODANDO';
-  addLog('INFO', 'Bot iniciado. Scanning Solana...');
-  runScan();
-  scanInterval = setInterval(runScan, 45000);
-  monitorInterval = setInterval(monitorPositions, 8000);
-}
-
-function stopBot() {
-  botRunning = false;
-  clearInterval(scanInterval);
-  clearInterval(monitorInterval);
-  document.getElementById('btn-bot').className = 'btn-start start';
-  document.getElementById('btn-bot').textContent = '▶ INICIAR BOT';
-  document.getElementById('status-dot').className = 'status-dot';
-  document.getElementById('status-text').textContent = 'OFFLINE';
-  addLog('INFO', 'Bot parado.');
-}
-
-// ============================================================
-// SCAN - DEXSCREENER
-// ============================================================
-async function runScan() {
-  if (!botRunning) return;
-  document.getElementById('scan-status').textContent = '⟳ ESCANEANDO...';
-  stats.analyzed += 1;
-  updateStats();
-
-  try {
-    // Busca tokens Solana recém-lançados com volume alto
-    const res = await fetch(`${DEXSCREENER_API}/search?q=solana`);
-    const data = await res.json();
-    const pairs = data.pairs || [];
-
-    // Filtra apenas Solana
-    const solanaPairs = pairs.filter(p => p.chainId === 'solana' && p.baseToken?.address !== SOL_MINT);
-
-    opportunities = [];
-    let rejected = 0;
-
-    for (const pair of solanaPairs.slice(0, 60)) {
-      const analysis = analyzeToken(pair);
-      stats.analyzed++;
-      if (analysis.blocked) { rejected++; stats.rejected++; continue; }
-      if (analysis.score >= parseInt(document.getElementById('min-score').value)) {
-        opportunities.push({ pair, analysis });
-      } else {
-        rejected++;
-        stats.rejected++;
-      }
-    }
-
-    // Ordena por score
-    opportunities.sort((a, b) => b.analysis.score - a.analysis.score);
-
-    updateStats();
-    renderOpportunities();
-
-    const maxPos = parseInt(document.getElementById('max-pos').value);
-    const activePositions = Object.keys(positions).length;
-
-    if (activePositions < maxPos && opportunities.length > 0) {
-      const best = opportunities[0];
-      if (best.analysis.score >= parseInt(document.getElementById('min-score').value)) {
-        executeBuy(best.pair, best.analysis);
-      }
-    }
-
-    document.getElementById('scan-status').textContent = `✓ ${opportunities.length} oportunidades · ${rejected} rejeitadas`;
-  } catch(e) {
-    addLog('WARN', 'Erro no scan (DexScreener): ' + e.message);
-    document.getElementById('scan-status').textContent = '⚠ Erro no scan — dados reais indisponíveis';
-    if (document.getElementById('allow-demo').checked) {
-      addLog('WARN', 'Modo demo ativado manualmente — os tokens abaixo são FICTÍCIOS, não é o mercado real.');
-      generateDemoData();
-    } else {
-      opportunities = [];
-      renderOpportunities();
-    }
-  }
-}
-
-// ============================================================
-// ANÁLISE COMPLETA DO TOKEN
-// ============================================================
-function analyzeToken(pair) {
-  let score = 100;
-  let risks = [];
-  let signals = [];
-  let blocked = false;
-
-  const price = parseFloat(pair.priceUsd || 0);
-  const vol24h = parseFloat(pair.volume?.h24 || 0);
-  const liq = parseFloat(pair.liquidity?.usd || 0);
-  const mcap = parseFloat(pair.fdv || 0);
-  const priceChange5m = parseFloat(pair.priceChange?.m5 || 0);
-  const priceChange1h = parseFloat(pair.priceChange?.h1 || 0);
-  const priceChange24h = parseFloat(pair.priceChange?.h24 || 0);
-  const txns = pair.txns?.h1 || { buys:0, sells:0 };
-  const buys = txns.buys || 0;
-  const sells = txns.sells || 0;
-  const ageMinutes = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / 60000 : 9999;
-
-  // Estágio estilo "Trenches" do TERMINAL (aproximação via dexId + idade — DexScreener não expõe
-  // % de progresso da bonding curve diretamente).
-  const isPreMigration = (pair.dexId || '').toLowerCase().includes('pump');
-  const stage = !isPreMigration ? 'MIGRATED' : (mcap >= 40000 ? 'FINAL STRETCH' : 'NEW PAIRS');
-
-  // ---- BLOQUEIOS ABSOLUTOS ----
-
-  // Token sem nome ou símbolo — jamais comprar token sem identidade
-  const tokenSymbol = pair.baseToken?.symbol || '';
-  const tokenName = pair.baseToken?.name || '';
-  if (!tokenSymbol || tokenSymbol === '' || tokenSymbol.toLowerCase() === 'unknown' ||
-      !tokenName || tokenName === '' || tokenName.toLowerCase() === 'spl token') {
-    blocked = true; risks.push('Token sem nome/símbolo identificado');
-    return { score: 0, risks, signals, blocked, stage, danger: 'SEM IDENTIDADE' };
-  }
-
-  // Liquidez ausente ou zero — campo nulo é tratado como bloqueio, não como zero permitido
-  const liqRaw = pair.liquidity?.usd;
-  if (liqRaw === undefined || liqRaw === null || liqRaw === '' || isNaN(parseFloat(liqRaw))) {
-    blocked = true; risks.push('Liquidez não informada pela API');
-    return { score: 0, risks, signals, blocked, stage, danger: 'LIQ AUSENTE' };
-  }
-
-  // Liquidez mínima absoluta de segurança ($500 mínimo independente de configuração)
-  if (liq < 500) {
-    blocked = true; risks.push(`Liquidez crítica ($${liq.toFixed(0)}) — risco de não conseguir vender`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'LIQ CRÍTICA' };
-  }
-
-  // Liquidez mínima configurada pelo usuário
-  if (liq < parseInt(document.getElementById('min-liq').value)) {
-    blocked = true; risks.push(`Liquidez insuficiente ($${liq.toFixed(0)})`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'BAIXA LIQ' };
-  }
-
-  // Market cap fora da faixa configurada (filtro estilo Insentos)
-  const mcapMin = parseInt(document.getElementById('mcap-min').value) || 0;
-  const mcapMax = parseInt(document.getElementById('mcap-max').value) || 0;
-  if (mcap < mcapMin) {
-    blocked = true; risks.push(`Market cap abaixo do mínimo ($${mcap.toFixed(0)})`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'MCAP BAIXO' };
-  }
-  if (mcapMax > 0 && mcap > mcapMax) {
-    blocked = true; risks.push(`Market cap acima do máximo ($${mcap.toFixed(0)})`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'MCAP ALTO' };
-  }
-
-  // Pool muito nova (< min configurado)
-  const minAge = parseInt(document.getElementById('min-age').value);
-  if (ageMinutes < minAge) {
-    blocked = true; risks.push(`Pool muito nova (${ageMinutes.toFixed(0)}min)`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'NOVA DEMAIS' };
-  }
-
-  // Pump & Dump: subida > 300% em 24h sem consolidação
-  if (priceChange24h > 300 && priceChange1h < 0) {
-    blocked = true; risks.push('Padrão P&D detectado');
-    return { score: 0, risks, signals, blocked, stage, danger: 'P&D' };
-  }
-
-  // Token em queda severa nas últimas 24h (como o token comprado: -40%)
-  if (priceChange24h < -30) {
-    blocked = true; risks.push(`Queda severa 24h (${priceChange24h.toFixed(1)}%)`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'QUEDA 24H' };
-  }
-
-  // Dump em andamento: queda > 15% em 5 min
-  if (priceChange5m < -15) {
-    blocked = true; risks.push('Dump em andamento (-15% em 5min)');
-    return { score: 0, risks, signals, blocked, stage, danger: 'DUMP' };
-  }
-
-  // Pouquíssimos traders — mercado ilíquido na prática
-  const traders24h = (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0);
-  if (traders24h < 20) {
-    blocked = true; risks.push(`Traders insuficientes nas últimas 24h (${traders24h})`);
-    return { score: 0, risks, signals, blocked, stage, danger: 'SEM TRADERS' };
-  }
-
-  // Sell pressure extrema: sells > 80% das transações
-  const totalTxns = buys + sells;
-  const sellRatio = totalTxns > 0 ? sells / totalTxns : 0;
-  if (sellRatio > 0.8 && totalTxns > 10) {
-    blocked = true; risks.push('Pressão de venda extrema');
-    return { score: 0, risks, signals, blocked, stage, danger: 'SELL PRESSURE' };
-  }
-
-  // Volume fake: vol24h > 10x liquidez
-  if (vol24h > liq * 10 && liq > 0) {
-    score -= 25; risks.push('Volume possivelmente artificial');
-  }
-
-  // ---- PENALIDADES ----
-
-  // Sem volume
-  if (vol24h < 5000) { score -= 20; risks.push('Volume baixo'); }
-
-  // Candlestick: sombra inferior > 3x o corpo (wick de rug)
-  if (priceChange5m < -8) { score -= 15; risks.push('Candle de rug detectado'); }
-
-  // Queda consistente
-  if (priceChange1h < -20) { score -= 20; risks.push('Queda forte na última hora'); }
-  if (priceChange24h < -40) { score -= 15; risks.push('Token em declínio'); }
-
-  // Sell > buy ratio
-  if (sellRatio > 0.65) { score -= 15; risks.push('Mais vendas que compras'); }
-
-  // ---- BÔNUS DE QUALIDADE ----
-
-  // Momentum positivo (3 sinais verdes)
-  if (priceChange5m > 2 && priceChange1h > 5 && priceChange24h > 10) {
-    score += 10; signals.push('Momentum positivo');
-  }
-
-  // Simetria: ratio risco/retorno estimado
-  const momentum = (priceChange5m * 0.3 + priceChange1h * 0.5 + priceChange24h * 0.2);
-  if (momentum > 5) { score += 8; signals.push('Simetria R:R favorável'); }
-
-  // Volume crescente
-  if (vol24h > 100000) { score += 5; signals.push('Volume alto'); }
-  if (vol24h > 500000) { score += 5; signals.push('Volume muito alto'); }
-
-  // Liquidez saudável
-  if (liq > 50000) { score += 5; signals.push('Boa liquidez'); }
-  if (liq > 200000) { score += 5; signals.push('Liquidez excelente'); }
-
-  // Buy pressure
-  if (sellRatio < 0.4) { score += 10; signals.push('Compras dominam'); }
-
-  // RSI simulado (baseado em momentum)
-  const rsiEstimate = 50 + momentum * 0.5;
-  const rsiMin = parseInt(document.getElementById('rsi-min').value);
-  const rsiMax = parseInt(document.getElementById('rsi-max').value);
-  if (rsiEstimate >= rsiMin && rsiEstimate <= rsiMax) {
-    score += 8; signals.push(`RSI ~${rsiEstimate.toFixed(0)} (zona ideal)`);
-  } else if (rsiEstimate > rsiMax) {
-    score -= 10; risks.push(`RSI ~${rsiEstimate.toFixed(0)} (sobrecomprado)`);
-  } else {
-    score -= 5; risks.push(`RSI ~${rsiEstimate.toFixed(0)} (fraco)`);
-  }
-
-  // EMA crossover simulado
-  if (priceChange5m > 0 && priceChange1h > 0) {
-    score += 5; signals.push('EMA9 > EMA21');
-  }
-
-  score = Math.max(0, Math.min(100, score));
 
   return {
-    score: Math.round(score),
-    risks,
-    signals,
-    blocked,
-    stage,
-    sellRatio: sellRatio.toFixed(2),
-    rsi: rsiEstimate.toFixed(0),
-    vol24h,
-    liq,
-    priceChange5m,
-    priceChange1h,
-    ageMinutes
+    get enabled() { return enabled },
+    toggle() { enabled = !enabled; if (enabled) init(); return enabled },
+    enable()  { enabled = true; init() },
+
+    // New token — 3-note ascending ping (high freq, short)
+    newToken() {
+      if (!enabled) return;
+      init();
+      const t = ctx.currentTime;
+      tone(880,  0.18, t,        0.14);
+      tone(1108, 0.18, t + 0.07, 0.14);
+      tone(1320, 0.22, t + 0.14, 0.20);
+    },
+
+    // Whale alert — deeper, 4-note, slightly louder (liq > $100K)
+    whale() {
+      if (!enabled) return;
+      init();
+      const t = ctx.currentTime;
+      tone(440, 0.28, t,        0.18);
+      tone(554, 0.28, t + 0.09, 0.18);
+      tone(659, 0.30, t + 0.18, 0.22);
+      tone(880, 0.25, t + 0.30, 0.30);
+    },
+  };
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════ */
+let allPairs   = [];        // normalized pair objects
+let seenAddrs  = null;      // Set<string> — null = first load
+let newCount   = 0;         // total new pairs detected this session
+let filter     = 'all';
+let sortKey    = 'age';
+let sortDir    = -1;
+let countdown  = 30;
+let timerID    = null;
+
+const srcStatus = { gt: 'ini', ds: 'ini' };
+
+/* ═══════════════════════════════════════════════════════════
+   FORMAT HELPERS
+   ═══════════════════════════════════════════════════════════ */
+function fmtPrice(p) {
+  if (p == null || p === '') return '—';
+  const n = +p; if (isNaN(n) || n === 0) return '—';
+  if (n < 1e-6)  return '$' + n.toExponential(2);
+  if (n < 0.001) return '$' + n.toFixed(7);
+  if (n < 1)     return '$' + n.toFixed(5);
+  if (n < 1000)  return '$' + n.toFixed(4);
+  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function fmtK(n) {
+  if (n == null || isNaN(+n)) return '—';
+  const v = +n;
+  if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'K';
+  return '$' + v.toFixed(0);
+}
+
+function fmtAge(ts) {
+  if (!ts) return { text:'—', cls:'old' };
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 60)  return { text: m + 'm',             cls: m < 10 ? 'fresh' : 'recent' };
+  const h = Math.floor(m / 60);
+  if (h < 24)  return { text: h + 'h',             cls: 'recent' };
+  return { text: Math.floor(h/24) + 'd',            cls: 'old' };
+}
+
+function fmtPct(v) {
+  if (v == null || v === '') return { text:'—', cls:'flat' };
+  const n = +v; if (isNaN(n)) return { text:'—', cls:'flat' };
+  const cls  = n > 0.05 ? 'up' : n < -0.05 ? 'down' : 'flat';
+  const sign = n > 0 ? '+' : '';
+  return { text: sign + n.toFixed(2) + '%', cls };
+}
+
+function truncAddr(a) {
+  if (!a) return ''; return a.slice(0,4) + '…' + a.slice(-4);
+}
+
+function dlmmVer(pair) {
+  if ((pair.labels||[]).some(l => /v2/i.test(l)))        return 'dlmm2';
+  if (/v2/i.test(pair.dexId||''))                         return 'dlmm2';
+  return 'dlmm';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DATA NORMALIZERS
+   ═══════════════════════════════════════════════════════════ */
+
+// GeckoTerminal pool → internal pair object
+function normGT(pool, inclMap) {
+  const a = pool.attributes || {};
+  const baseId  = pool.relationships?.base_token?.data?.id  || '';
+  const quoteId = pool.relationships?.quote_token?.data?.id || '';
+  const dexId   = pool.relationships?.dex?.data?.id         || 'meteora_dlmm';
+
+  const bt = inclMap[baseId]?.attributes  || {};
+  const qt = inclMap[quoteId]?.attributes || {};
+  const parts = (a.name || '').split(' / ');
+
+  const txH1 = a.transactions?.h1 || {};
+
+  return {
+    pairAddress : a.address,
+    baseToken   : {
+      symbol  : bt.symbol  || parts[0] || '?',
+      address : bt.address || baseId.replace('solana_', ''),
+      name    : bt.name    || '',
+    },
+    quoteToken  : {
+      symbol  : qt.symbol  || parts[1] || 'SOL',
+      address : qt.address || quoteId.replace('solana_', ''),
+    },
+    dexId        : dexId,
+    chainId      : 'solana',
+    priceUsd     : a.base_token_price_usd,
+    priceChange  : {
+      m5 : parseFloat(a.price_change_percentage?.m5  || 0),
+      h1 : parseFloat(a.price_change_percentage?.h1  || 0),
+      h6 : parseFloat(a.price_change_percentage?.h6  || 0),
+      h24: parseFloat(a.price_change_percentage?.h24 || 0),
+    },
+    volume      : { h24: parseFloat(a.volume_usd?.h24   || 0) },
+    liquidity   : { usd: parseFloat(a.reserve_in_usd    || 0) },
+    txns        : { buys: txH1.buys||0, sells: txH1.sells||0 },
+    pairCreatedAt: a.pool_created_at ? +new Date(a.pool_created_at) : null,
+    url         : `https://dexscreener.com/solana/${a.address}`,
+    labels      : dexId.includes('v2') ? ['DLMM v2'] : [],
+    _src        : 'gt',
   };
 }
 
-// ============================================================
-// RENDER OPORTUNIDADES
-// ============================================================
-function renderOpportunities() {
-  const list = document.getElementById('opp-list');
-  if (opportunities.length === 0) {
-    list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text3)">Nenhuma oportunidade aprovada no momento. Aguardando próximo scan...</div>';
-    return;
-  }
-
-  list.innerHTML = opportunities.slice(0, 20).map((o, i) => {
-    const p = o.pair;
-    const a = o.analysis;
-    const name = p.baseToken?.symbol || 'UNKNOWN';
-    const price = parseFloat(p.priceUsd || 0).toFixed(8);
-    const change5m = parseFloat(p.priceChange?.m5 || 0).toFixed(1);
-    const vol = formatNum(a.vol24h);
-    const liq = formatNum(a.liq);
-    const scoreClass = a.score >= 80 ? 'high' : a.score >= 60 ? 'med' : 'low';
-    const riskClass = a.risks.length === 0 ? 'safe' : a.risks.length <= 2 ? 'warn' : 'danger';
-    const riskLabel = a.risks.length === 0 ? 'SEGURO' : a.risks.length <= 2 ? 'ATENÇÃO' : 'RISCO';
-
-    return `<div class="opp-item ${selectedToken === i ? 'selected' : ''}" onclick="selectToken(${i})">
-      <div class="opp-header">
-        <div class="opp-name">
-          ${name}
-          <span class="risk-tag ${riskClass}">${riskLabel}</span>
-          <span class="risk-tag" style="background:var(--bg4); color:var(--text2)">${a.stage || ''}</span>
-        </div>
-        <div class="opp-score ${scoreClass}">Score ${a.score}</div>
-      </div>
-      <div class="opp-meta">
-        <div class="opp-meta-item">Preço: <span>$${price}</span></div>
-        <div class="opp-meta-item">5m: <span style="color:${change5m>=0?'var(--green)':'var(--red)'}">${change5m}%</span></div>
-        <div class="opp-meta-item">Vol: <span>$${vol}</span></div>
-        <div class="opp-meta-item">Liq: <span>$${liq}</span></div>
-        <div class="opp-meta-item">RSI: <span>${a.rsi}</span></div>
-      </div>
-      ${a.signals.length > 0 ? `<div style="margin-top:4px; font-size:10px; color:var(--green); opacity:.7">${a.signals.slice(0,2).join(' · ')}</div>` : ''}
-      ${a.risks.length > 0 ? `<div style="margin-top:2px; font-size:10px; color:var(--red); opacity:.7">${a.risks.slice(0,2).join(' · ')}</div>` : ''}
-    </div>`;
-  }).join('');
+// DexScreener pair → internal pair object
+function normDS(p) {
+  return {
+    pairAddress : p.pairAddress,
+    baseToken   : p.baseToken  || {},
+    quoteToken  : p.quoteToken || {},
+    dexId       : p.dexId,
+    chainId     : p.chainId,
+    priceUsd    : p.priceUsd,
+    priceChange : p.priceChange || {},
+    volume      : p.volume      || {},
+    liquidity   : p.liquidity   || {},
+    txns        : { buys: p.txns?.h1?.buys||0, sells: p.txns?.h1?.sells||0 },
+    pairCreatedAt: p.pairCreatedAt || null,
+    url         : p.url || `https://dexscreener.com/solana/${p.pairAddress}`,
+    labels      : p.labels || [],
+    _src        : 'ds',
+  };
 }
 
-function selectToken(i) {
-  selectedToken = i;
-  const o = opportunities[i];
-  if (!o) return;
-  const p = o.pair;
-  const a = o.analysis;
-  const name = p.baseToken?.symbol || 'UNKNOWN';
-  const price = parseFloat(p.priceUsd || 0).toFixed(8);
-  const change1h = parseFloat(p.priceChange?.h1 || 0).toFixed(1);
-  document.getElementById('chart-token').textContent = `${name}/SOL`;
-  document.getElementById('chart-price').textContent = `$${price}`;
-  document.getElementById('chart-change').textContent = `${change1h >= 0 ? '+' : ''}${change1h}% 1h`;
-  document.getElementById('chart-change').className = `chart-change ${change1h >= 0 ? 'pos' : 'neg'}`;
+/* ═══════════════════════════════════════════════════════════
+   FETCHERS
+   ═══════════════════════════════════════════════════════════ */
 
-  const inds = document.getElementById('indicators');
-  const rsi = parseInt(a.rsi);
-  const rsiClass = rsi >= 60 ? 'bull' : rsi <= 40 ? 'bear' : 'neutral';
-  inds.innerHTML = `
-    <div class="ind-chip ${rsiClass}">RSI ${a.rsi}</div>
-    <div class="ind-chip ${a.signals.includes('EMA9 > EMA21') ? 'bull' : 'neutral'}">EMA</div>
-    <div class="ind-chip ${parseFloat(a.sellRatio) < 0.5 ? 'bull' : 'bear'}">B/S ${(1-parseFloat(a.sellRatio)).toFixed(0)*100|0}/${(parseFloat(a.sellRatio)*100)|0}</div>
-    <div class="ind-chip ${a.score >= 70 ? 'bull' : 'bear'}">Score ${a.score}</div>`;
-
-  drawChart(p);
-  renderOpportunities();
+// AbortController com timeout compatível com todos os ambientes
+function makeSignal(ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  ctrl.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
+  return ctrl.signal;
 }
 
-// ============================================================
-// CHART (Candles simuladas baseadas em dados reais)
-// ============================================================
-function drawChart(pair) {
-  const canvas = document.getElementById('chart-canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth || 600;
-  canvas.height = 160;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const price = parseFloat(pair.priceUsd || 0.001);
-  const change24h = parseFloat(pair.priceChange?.h24 || 0) / 100;
-  const change1h = parseFloat(pair.priceChange?.h1 || 0) / 100;
-  const change5m = parseFloat(pair.priceChange?.m5 || 0) / 100;
-
-  // Gera candles sintéticas baseadas nos dados reais
-  const candles = [];
-  let p = price / (1 + change24h);
-  const steps = 48;
-  const totalChange = change24h;
-
-  for (let i = 0; i < steps; i++) {
-    const progress = i / steps;
-    const trend = totalChange * progress;
-    const noise = (Math.random() - 0.48) * 0.04;
-    const open = p;
-    const close = p * (1 + noise + trend / steps);
-    const high = Math.max(open, close) * (1 + Math.random() * 0.02);
-    const low = Math.min(open, close) * (1 - Math.random() * 0.015);
-    candles.push({ open, close, high, low });
-    p = close;
-  }
-
-  const highs = candles.map(c => c.high);
-  const lows = candles.map(c => c.low);
-  const minP = Math.min(...lows);
-  const maxP = Math.max(...highs);
-  const range = maxP - minP || 1;
-
-  const W = canvas.width;
-  const H = canvas.height;
-  const pad = { t: 10, b: 20, l: 10, r: 60 };
-  const cW = (W - pad.l - pad.r) / steps;
-
-  // Grid
-  ctx.strokeStyle = '#ffffff08';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 4; i++) {
-    const y = pad.t + (H - pad.t - pad.b) * i / 3;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-    const pVal = maxP - (maxP - minP) * i / 3;
-    ctx.fillStyle = '#555970'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
-    ctx.fillText(formatPrice(pVal), W - 2, y + 4);
-  }
-
-  // Candles
-  candles.forEach((c, i) => {
-    const x = pad.l + i * cW;
-    const bullish = c.close >= c.open;
-    const color = bullish ? '#00e676' : '#ff3d57';
-    const yO = pad.t + (maxP - c.open) / range * (H - pad.t - pad.b);
-    const yC = pad.t + (maxP - c.close) / range * (H - pad.t - pad.b);
-    const yH = pad.t + (maxP - c.high) / range * (H - pad.t - pad.b);
-    const yL = pad.t + (maxP - c.low) / range * (H - pad.t - pad.b);
-
-    // Wick
-    ctx.strokeStyle = color; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x + cW/2, yH); ctx.lineTo(x + cW/2, yL); ctx.stroke();
-
-    // Body
-    ctx.fillStyle = bullish ? '#00e67633' : '#ff3d5733';
-    ctx.strokeStyle = color; ctx.lineWidth = 1;
-    const bodyH = Math.abs(yC - yO) || 1;
-    ctx.beginPath();
-    ctx.rect(x + 1, Math.min(yO, yC), cW - 2, bodyH);
-    ctx.fill(); ctx.stroke();
-  });
-
-  // EMA9 (simulated)
-  ctx.strokeStyle = '#448aff88'; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  let ema = candles[0].close;
-  candles.forEach((c, i) => {
-    ema = ema * 0.8 + c.close * 0.2;
-    const x = pad.l + i * cW + cW/2;
-    const y = pad.t + (maxP - ema) / range * (H - pad.t - pad.b);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Last price line
-  const lastY = pad.t + (maxP - price) / range * (H - pad.t - pad.b);
-  ctx.strokeStyle = '#ffc10766'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(pad.l, lastY); ctx.lineTo(W - pad.r, lastY); ctx.stroke();
-  ctx.setLineDash([]);
+async function safeFetch(url) {
+  const r = await fetch(url, { signal: makeSignal(8000) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
 }
 
-// ============================================================
-// EXECUTE BUY (Jupiter DEX)
-// ============================================================
-let pendingBuy = null;
-
-function askBuyConfirmation(pair, analysis, tradeSizeSOL, quote) {
-  return new Promise(resolve => {
-    pendingBuy = { resolve };
-    const impactPct = (parseFloat(quote.priceImpactPct || 0) * 100).toFixed(2);
-    document.getElementById('confirm-buy-details').innerHTML = `
-      Token: <b>${pair.baseToken.symbol}</b><br>
-      Score do filtro: ${analysis.score}<br>
-      Valor: ${tradeSizeSOL} SOL<br>
-      Preço atual: $${parseFloat(pair.priceUsd || 0).toFixed(8)}<br>
-      Impacto de preço estimado: ${impactPct}%<br><br>
-      Esta é uma ordem REAL na blockchain Solana. Depois de enviada, não pode ser desfeita.`;
-    document.getElementById('confirm-buy-overlay').style.display = 'flex';
-    document.getElementById('confirm-buy-overlay').scrollIntoView({ block: 'center' });
-    addLog('BUY', `⏳ Aguardando sua confirmação para comprar ${pair.baseToken.symbol} (${tradeSizeSOL} SOL, impacto ${impactPct}%). Se não aparecer um popup na tela, role pra cima/baixo ou toque na tela.`);
-  });
-}
-function confirmPendingBuy() {
-  document.getElementById('confirm-buy-overlay').style.display = 'none';
-  if (pendingBuy) { pendingBuy.resolve(true); pendingBuy = null; }
-}
-function cancelPendingBuy() {
-  document.getElementById('confirm-buy-overlay').style.display = 'none';
-  if (pendingBuy) { addLog('INFO', 'Compra cancelada pelo usuário.'); pendingBuy.resolve(false); pendingBuy = null; }
-}
-
-// Assina com a carteira conectada (Wallet Standard / Phantom / Trust Wallet) e envia. Nunca usa chave crua.
-async function signAndSendSwap(swapTransactionBase64) {
-  if (!activeProvider) { addLog('WARN', 'Nenhuma carteira conectada.'); return null; }
-  if (!window.solanaWeb3) { addLog('WARN', '@solana/web3.js não carregou — verifique sua conexão de internet.'); return null; }
+// Processa um endpoint GeckoTerminal e adiciona ao Map
+async function gtEndpoint(url, results) {
   try {
-    const txBuf = Uint8Array.from(atob(swapTransactionBase64), c => c.charCodeAt(0));
-    const tx = window.solanaWeb3.VersionedTransaction.deserialize(txBuf);
-
-    if (activeProvider.signAndSendTransaction) {
-      const result = await activeProvider.signAndSendTransaction(tx);
-      return result?.signature || result;
-    }
-    const signedTx = await activeProvider.signTransaction(tx);
-    const rawTx = signedTx.serialize();
-    const b64 = btoa(String.fromCharCode(...rawTx));
-    const sendRes = await fetch(getRpcEndpoint(), {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'sendTransaction', params:[b64, {skipPreflight:true, maxRetries:3, encoding:'base64'}] })
-    });
-    const sendData = await sendRes.json();
-    if (sendData.error) { addLog('WARN', 'RPC rejeitou a transação: ' + sendData.error.message); return null; }
-    return sendData.result;
-  } catch (e) {
-    addLog('WARN', 'Assinatura rejeitada ou falhou: ' + e.message);
-    return null;
-  }
-}
-
-async function executeBuy(pair, analysis) {
-  if (!wallet || !activeProvider) { addLog('WARN', 'Conecte uma carteira antes de operar.'); return; }
-  if (positions[pair.pairAddress]) { return; }
-
-  const tokenOut = pair.baseToken?.address;
-  if (!tokenOut) { addLog('WARN', 'Endereço do token inválido.'); return; }
-
-  const tradeSizeSOL = parseFloat(document.getElementById('trade-size').value);
-  const amountLamports = Math.floor(tradeSizeSOL * 1e9);
-  const slippage = parseFloat(document.getElementById('slippage').value) * 100;
-
-  addLog('BUY', `Buscando rota: ${pair.baseToken.symbol}... Score ${analysis.score}`);
-
-  try {
-    // 1. Pega quote do Jupiter
-    const quoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${SOL_MINT}&outputMint=${tokenOut}&amount=${amountLamports}&slippageBps=${slippage}`,
-      { headers: jupiterHeaders() }
-    );
-    if (!quoteRes.ok) { addLog('WARN', `Quote HTTP ${quoteRes.status} — Jupiter recusou a requisição (verifique a API key).`); return; }
-    const quote = await quoteRes.json();
-
-    if (quote.error) { addLog('WARN', `Quote error: ${quote.error}`); return; }
-
-    // 2. Verifica honeypot: simula sell antes de comprar
-    const sellQuoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${tokenOut}&outputMint=${SOL_MINT}&amount=${quote.outAmount}&slippageBps=${slippage * 2}`,
-      { headers: jupiterHeaders() }
-    );
-    const sellQuote = await sellQuoteRes.json();
-    if (!sellQuote.outAmount) {
-      addLog('WARN', `⛔ HONEYPOT DETECTADO: ${pair.baseToken.symbol} — sem saída possível!`);
-      return;
-    }
-    const sellImpact = 1 - (parseInt(sellQuote.outAmount) / amountLamports);
-    if (sellImpact > 0.3) {
-      addLog('WARN', `⛔ Alto impacto na venda (${(sellImpact*100).toFixed(0)}%) — possível honeypot: ${pair.baseToken.symbol}`);
-      return;
-    }
-
-    // 3. Confirmação manual (recomendada pelo manual do Insentos: sempre confirmar antes de comprar)
-    if (document.getElementById('require-confirm').checked) {
-      const proceed = await askBuyConfirmation(pair, analysis, tradeSizeSOL, quote);
-      if (!proceed) { addLog('INFO', `Compra de ${pair.baseToken.symbol} cancelada.`); return; }
-    }
-
-    // 4. Pega swap transaction
-    const swapRes = await fetch(`${JUPITER_API}/swap`, {
-      method: 'POST',
-      headers: jupiterHeaders(),
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey: wallet,
-        wrapAndUnwrapSol: true,
-        skipUserAccountRpcCalls: true,
-        prioritizationFeeLamports: 5000
-      })
-    });
-    const swapData = await swapRes.json();
-
-    if (!swapData.swapTransaction) {
-      addLog('WARN', 'Falha ao obter transação de swap.');
-      return;
-    }
-
-    // 5. Assina com a carteira conectada e envia
-    const signature = await signAndSendSwap(swapData.swapTransaction);
-    if (!signature) { addLog('WARN', 'Transação não enviada / rejeitada.'); return; }
-
-    const entryPrice = parseFloat(pair.priceUsd || 0);
-    positions[pair.pairAddress] = {
-      symbol: pair.baseToken.symbol,
-      address: tokenOut,
-      pairAddress: pair.pairAddress,
-      entryPrice,
-      currentPrice: entryPrice,
-      highestPrice: entryPrice,
-      amountSOL: tradeSizeSOL,
-      amountToken: parseInt(quote.outAmount),
-      signature,
-      entryTime: Date.now()
-    };
-
-    stats.trades++;
-    addLog('BUY', `✅ COMPRADO ${pair.baseToken.symbol} @ $${entryPrice.toFixed(8)} · TX: ${signature.slice(0,12)}...`);
-    updateStats();
-    renderPositions();
-    fetchBalances();
-
-  } catch(e) {
-    addLog('WARN', `Erro no swap: ${e.message}`);
-  }
-}
-
-// ============================================================
-// MONITOR POSITIONS
-// ============================================================
-async function monitorPositions() {
-  if (!botRunning) return;
-  for (const pairAddr in positions) {
-    const pos = positions[pairAddr];
-    try {
-      const res = await fetch(`${DEXSCREENER_API}/pairs/solana/${pairAddr}`);
-      const data = await res.json();
-      const pair = data.pair || data.pairs?.[0];
-      if (!pair) continue;
-
-      const currentPrice = parseFloat(pair.priceUsd || pos.entryPrice);
-      const pnlPct = (currentPrice - pos.entryPrice) / pos.entryPrice * 100;
-      pos.currentPrice = currentPrice;
-
-      // Atualiza highest para trailing
-      if (currentPrice > pos.highestPrice) pos.highestPrice = currentPrice;
-
-      const tp = parseFloat(document.getElementById('take-profit').value);
-      const sl = parseFloat(document.getElementById('stop-loss').value);
-      const trailing = parseFloat(document.getElementById('trailing').value);
-
-      // Trailing stop: se atingiu TP e caiu trailing% do topo
-      const trailingFromHigh = (pos.highestPrice - currentPrice) / pos.highestPrice * 100;
-      const hitTP = pnlPct >= tp;
-      const hitSL = pnlPct <= -sl;
-      const hitTrailing = trailingFromHigh >= trailing && pnlPct > 5;
-
-      // Anti-dump em tempo real
-      const priceChange5m = parseFloat(pair.priceChange?.m5 || 0);
-      if (priceChange5m < -12) {
-        addLog('WARN', `⚠ Dump detectado em ${pos.symbol}! Saindo emergencialmente...`);
-        await executeSell(pos, pair, 'DUMP_EMERGENCY');
-        continue;
+    const d = await safeFetch(url);
+    const inclMap = {};
+    (d.included || []).forEach(i => { inclMap[i.id] = i });
+    (d.data || []).forEach(pool => {
+      if (pool.attributes?.address) {
+        const p = normGT(pool, inclMap);
+        if (!results.has(p.pairAddress)) results.set(p.pairAddress, p);
       }
-
-      if (hitSL) { await executeSell(pos, pair, 'STOP_LOSS'); }
-      else if (hitTP) { await executeSell(pos, pair, 'TAKE_PROFIT'); }
-      else if (hitTrailing) { await executeSell(pos, pair, 'TRAILING_STOP'); }
-
-    } catch(e) {}
-  }
-  renderPositions();
-}
-
-async function executeSell(pos, pair, reason) {
-  const pnlPct = (pos.currentPrice - pos.entryPrice) / pos.entryPrice * 100;
-  const pnlUSD = pos.amountSOL * (pnlPct / 100) * (pos.currentPrice / pos.entryPrice);
-
-  try {
-    const slippage = parseFloat(document.getElementById('slippage').value) * 100 * 2;
-    const quoteRes = await fetch(
-      `${JUPITER_API}/quote?inputMint=${pos.address}&outputMint=${SOL_MINT}&amount=${pos.amountToken}&slippageBps=${slippage}`,
-      { headers: jupiterHeaders() }
-    );
-    const quote = await quoteRes.json();
-    if (quote.error) throw new Error(quote.error);
-
-    const swapRes = await fetch(`${JUPITER_API}/swap`, {
-      method: 'POST', headers: jupiterHeaders(),
-      body: JSON.stringify({ quoteResponse: quote, userPublicKey: wallet, wrapAndUnwrapSol: true, skipUserAccountRpcCalls: true, prioritizationFeeLamports: 5000 })
     });
-    const swapData = await swapRes.json();
-    if (!swapData.swapTransaction) throw new Error('Falha ao obter transação de venda.');
-
-    const sig = await signAndSendSwap(swapData.swapTransaction);
-    if (!sig) throw new Error('Venda não assinada/enviada.');
-
-    // Cofre de lucros
-    const vaultPct = parseFloat(document.getElementById('vault-pct').value);
-    if (pnlUSD > 0) {
-      const vaultAmt = pnlUSD * (vaultPct / 100);
-      stats.vault += vaultAmt;
-      document.getElementById('vault-val').textContent = '$' + stats.vault.toFixed(2);
-    }
-
-    stats.pnl += pnlUSD;
-    if (pnlUSD > 0) stats.wins++;
-
-    const emoji = reason === 'TAKE_PROFIT' ? '🎯' : reason === 'TRAILING_STOP' ? '🔒' : reason === 'DUMP_EMERGENCY' ? '🚨' : '🛑';
-    addLog('SELL', `${emoji} ${pos.symbol} — ${reason} · P&L: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% ($${pnlUSD >= 0 ? '+' : ''}${pnlUSD.toFixed(3)})`, pnlUSD);
-    delete positions[pos.pairAddress];
-    updateStats();
-    fetchBalances();
-
-  } catch(e) {
-    addLog('WARN', `Erro ao vender ${pos.symbol}: ${e.message}`);
-  }
+  } catch (_) {}
 }
 
-// ============================================================
-// RENDER POSITIONS
-// ============================================================
-function renderPositions() {
-  const area = document.getElementById('positions-area');
-  const keys = Object.keys(positions);
-  if (keys.length === 0) {
-    area.innerHTML = '<div style="padding:12px 0; color:var(--text3); font-size:11px">Nenhuma posição aberta.</div>';
+// GeckoTerminal: requests paralelos para todos os dex IDs Meteora
+async function fetchGeckoTerminal() {
+  const DEXES = ['meteora_dlmm', 'meteora_dlmm_v2', 'meteora'];
+  const results = new Map();
+
+  const tasks = DEXES.flatMap(dex => [
+    gtEndpoint(
+      `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?dex=${dex}&include=base_token,quote_token,dex`,
+      results
+    ),
+    gtEndpoint(
+      `https://api.geckoterminal.com/api/v2/networks/solana/dexes/${dex}/pools?sort=pool_created_at_desc&include=base_token,quote_token,dex&page=1`,
+      results
+    ),
+  ]);
+
+  await Promise.allSettled(tasks);
+  return [...results.values()];
+}
+
+// DexScreener: token profiles + direct search
+async function fetchDexScreener() {
+  const results = new Map();
+
+  // 1) Latest token profiles → fetch their Solana pairs → filter Meteora
+  try {
+    const profiles = await safeFetch('https://api.dexscreener.com/token-profiles/latest/v1');
+    const addrs = (Array.isArray(profiles) ? profiles : [])
+      .filter(p => p.chainId === 'solana')
+      .slice(0, 30).map(p => p.tokenAddress).filter(Boolean);
+
+    if (addrs.length) {
+      try {
+        const d2 = await safeFetch(`https://api.dexscreener.com/latest/dex/tokens/${addrs.join(',')}`);
+        (d2.pairs||[])
+          .filter(p => p.dexId?.toLowerCase().includes('meteora') && p.chainId==='solana')
+          .forEach(p => results.set(p.pairAddress, normDS(p)));
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 2) Direct search for "meteora"
+  try {
+    const d3 = await safeFetch('https://api.dexscreener.com/latest/dex/search?q=meteora');
+    (d3.pairs||[])
+      .filter(p => p.dexId?.toLowerCase().includes('meteora') && p.chainId==='solana')
+      .forEach(p => { if (!results.has(p.pairAddress)) results.set(p.pairAddress, normDS(p)) });
+  } catch (_) {}
+
+  return [...results.values()];
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN FETCH — parallel, merge by pairAddress (GT wins)
+   ═══════════════════════════════════════════════════════════ */
+async function fetchAll() {
+  const [gtPairs, dsPairs] = await Promise.allSettled([
+    fetchGeckoTerminal(),
+    fetchDexScreener(),
+  ]).then(res => res.map(r => r.status === 'fulfilled' ? r.value : []));
+
+  // Source status
+  srcStatus.gt = gtPairs.length > 0 ? 'ok' : 'err';
+  srcStatus.ds = dsPairs.length > 0 ? 'ok' : 'err';
+
+  // Merge: GT is authoritative, DS fills gaps
+  const merged = new Map();
+  dsPairs.forEach(p => merged.set(p.pairAddress, p));
+  gtPairs.forEach(p => merged.set(p.pairAddress, p));   // GT overwrites
+
+  return [...merged.values()];
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SORT + FILTER
+   ═══════════════════════════════════════════════════════════ */
+function sortPairs(pairs) {
+  return [...pairs].sort((a, b) => {
+    let av, bv;
+    switch (sortKey) {
+      case 'symbol': return sortDir * (a.baseToken.symbol||'').localeCompare(b.baseToken.symbol||'');
+      case 'price' : av=+(a.priceUsd||0);                bv=+(b.priceUsd||0);               break;
+      case 'm5'    : av=+(a.priceChange?.m5||0);          bv=+(b.priceChange?.m5||0);        break;
+      case 'h1'    : av=+(a.priceChange?.h1||0);          bv=+(b.priceChange?.h1||0);        break;
+      case 'h6'    : av=+(a.priceChange?.h6||0);          bv=+(b.priceChange?.h6||0);        break;
+      case 'h24'   : av=+(a.priceChange?.h24||0);         bv=+(b.priceChange?.h24||0);       break;
+      case 'txns'  : av=(a.txns?.buys||0)+(a.txns?.sells||0); bv=(b.txns?.buys||0)+(b.txns?.sells||0); break;
+      case 'vol'   : av=+(a.volume?.h24||0);              bv=+(b.volume?.h24||0);            break;
+      case 'liq'   : av=+(a.liquidity?.usd||0);           bv=+(b.liquidity?.usd||0);         break;
+      case 'age'   : av=+(a.pairCreatedAt||0);            bv=+(b.pairCreatedAt||0);          break;
+      default      : av=0; bv=0;
+    }
+    return sortDir * (bv - av);
+  });
+}
+
+function visible() {
+  let p = allPairs;
+  if (filter === 'dlmm')  p = p.filter(x => dlmmVer(x) === 'dlmm');
+  if (filter === 'dlmm2') p = p.filter(x => dlmmVer(x) === 'dlmm2');
+  return sortPairs(p);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER
+   ═══════════════════════════════════════════════════════════ */
+function renderStats(newAddrs) {
+  const dlmm  = allPairs.filter(p => dlmmVer(p) === 'dlmm').length;
+  const dlmm2 = allPairs.filter(p => dlmmVer(p) === 'dlmm2').length;
+  const vol   = allPairs.reduce((s, p) => s + (+(p.volume?.h24)||0), 0);
+  const liq   = allPairs.reduce((s, p) => s + (+(p.liquidity?.usd)||0), 0);
+
+  document.getElementById('sPairs').textContent  = allPairs.length;
+  document.getElementById('sDlmm').textContent   = dlmm;
+  document.getElementById('sDlmm2').textContent  = dlmm2;
+  document.getElementById('sNew').textContent    = newCount;
+  document.getElementById('sVol').textContent    = fmtK(vol);
+  document.getElementById('sLiq').textContent    = fmtK(liq);
+  document.getElementById('sTime').textContent   = new Date().toLocaleTimeString('pt-BR');
+
+  const gtEl = document.getElementById('srcGT');
+  const dsEl = document.getElementById('srcDS');
+  gtEl.textContent = 'GT ' + (srcStatus.gt === 'ok' ? '✓' : srcStatus.gt === 'err' ? '✗' : '—');
+  gtEl.className   = 'src-badge ' + (srcStatus.gt === 'ok' ? 'src-ok' : srcStatus.gt === 'err' ? 'src-err' : 'src-ini');
+  dsEl.textContent = 'DS ' + (srcStatus.ds === 'ok' ? '✓' : srcStatus.ds === 'err' ? '✗' : '—');
+  dsEl.className   = 'src-badge ' + (srcStatus.ds === 'ok' ? 'src-ok' : srcStatus.ds === 'err' ? 'src-err' : 'src-ini');
+}
+
+function renderTable(newAddrs) {
+  const pairs = visible();
+  const tbody = document.getElementById('tbody');
+
+  if (!pairs.length) {
+    // Se allPairs também está vazio, exibe estado de erro real
+    if (!allPairs.length) return;  // showError() já cuida disso
+    tbody.innerHTML = `<tr class="state-row"><td colspan="13">
+      <div class="err-state">
+        <div class="err-title" style="color:var(--muted)">Nenhum par neste filtro</div>
+      </div>
+    </td></tr>`;
     return;
   }
-  area.innerHTML = keys.map(k => {
-    const p = positions[k];
-    const pnlPct = (p.currentPrice - p.entryPrice) / p.entryPrice * 100;
-    const isPos = pnlPct >= 0;
-    const barW = Math.min(Math.abs(pnlPct) / 20 * 100, 100);
-    return `<div class="pos-item">
-      <div class="pos-token">${p.symbol}</div>
-      <div class="pos-bar-wrap">
-        <div class="pos-bar-bg">
-          <div class="pos-bar ${isPos?'profit':'loss'}" style="width:${barW}%"></div>
+
+  tbody.innerHTML = pairs.map((pair, i) => {
+    const ver  = dlmmVer(pair);
+    const base = pair.baseToken || {};
+    const pc   = pair.priceChange || {};
+    const m5   = fmtPct(pc.m5);
+    const h1   = fmtPct(pc.h1);
+    const h6   = fmtPct(pc.h6);
+    const h24  = fmtPct(pc.h24);
+    const age  = fmtAge(pair.pairCreatedAt);
+    const isNew = newAddrs?.has(pair.pairAddress);
+    const liq  = +(pair.liquidity?.usd||0);
+    const cls  = isNew ? (liq >= 100000 ? ' flash-whale' : ' flash-new') : '';
+
+    const badge = ver === 'dlmm2'
+      ? '<span class="badge b-dlmm2">DLMM v2</span>'
+      : '<span class="badge b-dlmm">DLMM</span>';
+
+    const newTag = isNew ? '<span class="badge b-new">NOVO</span>' : '';
+
+    const buys  = pair.txns?.buys  || 0;
+    const sells = pair.txns?.sells || 0;
+    const txHtml = (buys || sells)
+      ? `<span class="txb">${buys}B</span><span class="txd"> / </span><span class="txs">${sells}S</span>`
+      : '<span class="txd">—</span>';
+
+    const dexUrl = pair.url || `https://dexscreener.com/solana/${pair.pairAddress}`;
+    const beUrl  = `https://birdeye.so/token/${base.address}?chain=solana`;
+    const scUrl  = `https://solscan.io/account/${pair.pairAddress}`;
+
+    return `<tr class="${cls}" onclick="window.open('${dexUrl}','_blank')">
+      <td class="num">${i+1}</td>
+      <td class="td-token">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:flex;align-items:baseline">
+            <span class="tok-sym">${base.symbol||'?'}</span>
+            <span class="tok-sep">/${pair.quoteToken?.symbol||'SOL'}</span>
+            ${newTag}
+          </div>
+          <div class="tok-addr">${truncAddr(base.address)}</div>
         </div>
-        <div style="font-size:9px; color:var(--text3); margin-top:2px">Entry $${formatPrice(p.entryPrice)} → $${formatPrice(p.currentPrice)}</div>
-      </div>
-      <div class="pos-pnl ${isPos?'pos':'neg'}">${isPos?'+':''}${pnlPct.toFixed(2)}%</div>
-    </div>`;
+      </td>
+      <td>${badge}</td>
+      <td class="price">${fmtPrice(pair.priceUsd)}</td>
+      <td class="pct ${m5.cls}">${m5.text}</td>
+      <td class="pct ${h1.cls}">${h1.text}</td>
+      <td class="pct ${h6.cls}">${h6.text}</td>
+      <td class="pct ${h24.cls}">${h24.text}</td>
+      <td class="txns">${txHtml}</td>
+      <td class="vol">${fmtK(pair.volume?.h24)}</td>
+      <td class="liq">${fmtK(pair.liquidity?.usd)}</td>
+      <td class="age ${age.cls}">${age.text}</td>
+      <td onclick="event.stopPropagation()">
+        <div class="link-row">
+          <a href="${dexUrl}" target="_blank" class="ext-link">DS</a>
+          <a href="${beUrl}"  target="_blank" class="ext-link">BE</a>
+          <a href="${scUrl}"  target="_blank" class="ext-link">SC</a>
+        </div>
+      </td>
+    </tr>`;
   }).join('');
-  document.getElementById('stat-positions').textContent = keys.length;
 }
 
-// ============================================================
-// STATS
-// ============================================================
-function updateStats() {
-  const pnlEl = document.getElementById('stat-pnl');
-  pnlEl.textContent = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
-  pnlEl.className = 'stat-val ' + (stats.pnl >= 0 ? 'green' : 'red');
-  document.getElementById('stat-pnl-pct').textContent = stats.pnl.toFixed(3) + ' SOL equiv.';
-  document.getElementById('stat-trades').textContent = stats.trades;
-  const wr = stats.trades > 0 ? Math.round(stats.wins / stats.trades * 100) : 0;
-  document.getElementById('stat-winrate').textContent = `Win: ${wr}%`;
-  document.getElementById('stat-analyzed').textContent = stats.analyzed;
-  document.getElementById('stat-rejected').textContent = `Rejeitados: ${stats.rejected}`;
-  document.getElementById('vault-val').textContent = '$' + stats.vault.toFixed(2);
+function showError(msgs) {
+  document.getElementById('tbody').innerHTML = `<tr class="state-row"><td colspan="13">
+    <div class="err-state">
+      <div class="err-title">⚠ Nenhum dado retornado pelas APIs</div>
+      <div class="err-detail">${msgs.join(' · ')}</div>
+      <div class="err-sources">
+        <span>GeckoTerminal: ${srcStatus.gt}</span>
+        <span>DexScreener: ${srcStatus.ds}</span>
+      </div>
+      <div class="err-detail" style="color:var(--muted);margin-top:4px">
+        Verifique a conexão. O sistema tentará novamente automaticamente.
+      </div>
+    </div>
+  </td></tr>`;
 }
 
-// ============================================================
-// DEMO DATA (quando API não acessível)
-// ============================================================
-function generateDemoData() {
-  const demoTokens = [
-    { symbol: 'PEPE2', change24h: 45, change1h: 8, change5m: 2.1, vol: 287000, liq: 68000, sells: 38, buys: 62, age: 180 },
-    { symbol: 'MOONDUST', change24h: 22, change1h: 4, change5m: 1.5, vol: 145000, liq: 35000, sells: 42, buys: 58, age: 240 },
-    { symbol: 'RUGPULL', change24h: 820, change1h: -35, change5m: -18, vol: 90000, liq: 4000, sells: 85, buys: 15, age: 8 },
-    { symbol: 'SOLDOG', change24h: 18, change1h: 3, change5m: 0.8, vol: 392000, liq: 120000, sells: 40, buys: 60, age: 420 },
-    { symbol: 'MEMEX', change24h: 67, change1h: 12, change5m: 3.2, vol: 520000, liq: 95000, sells: 35, buys: 65, age: 95 },
-  ];
-
-  opportunities = demoTokens.filter(t => {
-    const sellRatio = t.sells / 100;
-    const blocked = t.liq < 10000 || t.age < 10 || t.change5m < -15 || (t.change24h > 300 && t.change1h < 0) || sellRatio > 0.8;
-    return !blocked;
-  }).map(t => {
-    const pair = {
-      pairAddress: 'demo-' + t.symbol,
-      baseToken: { symbol: t.symbol, address: SOL_MINT },
-      priceUsd: (Math.random() * 0.001).toFixed(8),
-      priceChange: { m5: t.change5m, h1: t.change1h, h24: t.change24h },
-      volume: { h24: t.vol },
-      liquidity: { usd: t.liq },
-      txns: { h1: { buys: t.buys, sells: t.sells } },
-      pairCreatedAt: Date.now() - t.age * 60000
-    };
-    const analysis = analyzeToken(pair);
-    return { pair, analysis };
-  }).filter(o => o.analysis.score >= parseInt(document.getElementById('min-score').value));
-
-  opportunities.sort((a, b) => b.analysis.score - a.analysis.score);
-  renderOpportunities();
-  document.getElementById('scan-status').textContent = `✓ ${opportunities.length} oportunidades (demo) · API limitada`;
-  stats.analyzed += demoTokens.length;
-  stats.rejected += demoTokens.length - opportunities.length;
-  updateStats();
-  if (opportunities.length > 0) selectToken(0);
+/* ═══════════════════════════════════════════════════════════
+   LOAD CYCLE
+   ═══════════════════════════════════════════════════════════ */
+function startTimer() {
+  clearInterval(timerID);
+  countdown = 30;
+  document.getElementById('timerLabel').textContent = '30s';
+  timerID = setInterval(() => {
+    countdown--;
+    document.getElementById('timerLabel').textContent = countdown + 's';
+    if (countdown <= 0) load();
+  }, 1000);
 }
 
-// ============================================================
-// LOG
-// ============================================================
-function addLog(type, msg, pnl) {
-  const now = new Date().toLocaleTimeString('pt-BR');
-  const area = document.getElementById('log-area');
-  const pnlHtml = pnl != null ? `<span class="log-pnl ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(3)}</span>` : '<span class="log-pnl"></span>';
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">${now}</span><span class="log-type ${type}">${type}</span><span class="log-msg">${msg}</span>${pnlHtml}`;
-  area.insertBefore(entry, area.firstChild);
-  if (area.children.length > 100) area.removeChild(area.lastChild);
-}
+async function load() {
+  clearInterval(timerID);
+  document.getElementById('timerLabel').textContent = '…';
+  document.getElementById('refreshBtn').classList.add('spinning');
 
-// ============================================================
-// HELPERS
-// ============================================================
-function formatNum(n) {
-  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
-  return n.toFixed(0);
-}
-function formatPrice(p) {
-  if (!p) return '0';
-  if (p < 0.000001) return p.toExponential(2);
-  if (p < 0.001) return p.toFixed(7);
-  if (p < 1) return p.toFixed(5);
-  return p.toFixed(3);
-}
-
-// Canvas resize
-window.addEventListener('resize', () => {
-  if (selectedToken != null && opportunities[selectedToken]) {
-    drawChart(opportunities[selectedToken].pair);
+  let pairs;
+  try {
+    pairs = await fetchAll();
+  } catch (e) {
+    pairs = [];
   }
+
+  if (!pairs.length) {
+    showError([
+      'GeckoTerminal: ' + (srcStatus.gt === 'ok' ? 'OK' : 'sem resposta'),
+      'DexScreener: '   + (srcStatus.ds === 'ok' ? 'OK' : 'sem resposta'),
+    ]);
+    document.getElementById('refreshBtn').classList.remove('spinning');
+    startTimer();
+    return;
+  }
+
+  // Detect new pairs
+  let newAddrs = null;
+  if (seenAddrs === null) {
+    // First load — populate seen without alerting
+    seenAddrs = new Set(pairs.map(p => p.pairAddress));
+  } else {
+    newAddrs = new Set();
+    let maxLiq = 0;
+    for (const p of pairs) {
+      if (!seenAddrs.has(p.pairAddress)) {
+        newAddrs.add(p.pairAddress);
+        seenAddrs.add(p.pairAddress);
+        newCount++;
+        const liq = +(p.liquidity?.usd||0);
+        if (liq > maxLiq) maxLiq = liq;
+      }
+    }
+    if (newAddrs.size > 0) {
+      if (maxLiq >= 100000) Sound.whale();
+      else                  Sound.newToken();
+    }
+  }
+
+  allPairs = pairs;
+  renderStats(newAddrs);
+  renderTable(newAddrs);
+
+  document.getElementById('refreshBtn').classList.remove('spinning');
+  startTimer();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SOUND TOGGLE
+   ═══════════════════════════════════════════════════════════ */
+document.getElementById('soundBtn').addEventListener('click', function() {
+  const on = Sound.toggle();
+  document.getElementById('soundLabel').textContent = on ? 'SOM ON' : 'SOM OFF';
+  this.classList.toggle('on', on);
+  if (on) Sound.newToken();  // preview sound when enabling
 });
 
-// Init
-addLog('INFO', 'Quantum Scalp Bot carregado. Conecte a carteira e inicie.');
-addLog('INFO', 'Proteções: Anti-Rug · Honeypot · Dump · P&D · Liq.Lock ativas.');
+/* ═══════════════════════════════════════════════════════════
+   SORT HEADERS
+   ═══════════════════════════════════════════════════════════ */
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    sortDir = (sortKey === key) ? sortDir * -1 : -1;
+    sortKey = key;
+    document.querySelectorAll('thead th').forEach(t => {
+      t.classList.remove('sort-active');
+      t.querySelector('.sa')?.remove();
+    });
+    th.classList.add('sort-active');
+    const arrow = document.createElement('span');
+    arrow.className = 'sa';
+    arrow.textContent = sortDir === -1 ? '↓' : '↑';
+    th.appendChild(arrow);
+    renderTable(null);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filter = btn.dataset.filter;
+    renderTable(null);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   MANUAL REFRESH
+   ═══════════════════════════════════════════════════════════ */
+document.getElementById('refreshBtn').addEventListener('click', () => load());
+
+/* ═══════════════════════════════════════════════════════════
+   BOOT
+   ═══════════════════════════════════════════════════════════ */
+load();
 </script>
-</body>
-</html>
