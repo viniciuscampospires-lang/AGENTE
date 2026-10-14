@@ -690,54 +690,41 @@ async function gtEndpoint(url, results) {
   } catch (_) {}
 }
 
-// GeckoTerminal: requests paralelos para todos os dex IDs Meteora
+// GeckoTerminal: APENAS endpoint dexes/{dex}/pools — garante filtro por DEX
+// new_pools ignorava o parâmetro dex= e trazia pools de qualquer DEX da Solana
 async function fetchGeckoTerminal() {
-  const DEXES = ['meteora_dlmm', 'meteora_dlmm_v2', 'meteora'];
+  const DEXES = ['meteora_dlmm', 'meteora_dlmm_v2'];
   const results = new Map();
 
-  const tasks = DEXES.flatMap(dex => [
-    gtEndpoint(
-      `https://api.geckoterminal.com/api/v2/networks/solana/new_pools?dex=${dex}&include=base_token,quote_token,dex`,
-      results
-    ),
+  const tasks = DEXES.map(dex =>
     gtEndpoint(
       `https://api.geckoterminal.com/api/v2/networks/solana/dexes/${dex}/pools?sort=pool_created_at_desc&include=base_token,quote_token,dex&page=1`,
       results
-    ),
-  ]);
+    )
+  );
 
   await Promise.allSettled(tasks);
   return [...results.values()];
 }
 
-// DexScreener: token profiles + direct search
+// DexScreener: busca direta por DEX Meteora — sem token-profiles que trazia qualquer DEX
 async function fetchDexScreener() {
   const results = new Map();
 
-  // 1) Latest token profiles → fetch their Solana pairs → filter Meteora
-  try {
-    const profiles = await safeFetch('https://api.dexscreener.com/token-profiles/latest/v1');
-    const addrs = (Array.isArray(profiles) ? profiles : [])
-      .filter(p => p.chainId === 'solana')
-      .slice(0, 30).map(p => p.tokenAddress).filter(Boolean);
-
-    if (addrs.length) {
-      try {
-        const d2 = await safeFetch(`https://api.dexscreener.com/latest/dex/tokens/${addrs.join(',')}`);
-        (d2.pairs||[])
-          .filter(p => METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) && p.chainId==='solana')
-          .forEach(p => results.set(p.pairAddress, normDS(p)));
-      } catch (_) {}
-    }
-  } catch (_) {}
-
-  // 2) Direct search for "meteora"
-  try {
-    const d3 = await safeFetch('https://api.dexscreener.com/latest/dex/search?q=meteora');
-    (d3.pairs||[])
-      .filter(p => METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) && p.chainId==='solana')
-      .forEach(p => { if (!results.has(p.pairAddress)) results.set(p.pairAddress, normDS(p)) });
-  } catch (_) {}
+  // Busca direta pelos pares Meteora DLMM
+  const queries = ['meteora_dlmm', 'meteora dlmm'];
+  for (const q of queries) {
+    try {
+      const d = await safeFetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(q)}`);
+      (d.pairs||[])
+        .filter(p =>
+          METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) &&
+          p.chainId === 'solana' &&
+          p.pairAddress
+        )
+        .forEach(p => { if (!results.has(p.pairAddress)) results.set(p.pairAddress, normDS(p)) });
+    } catch (_) {}
+  }
 
   return [...results.values()];
 }
@@ -760,7 +747,8 @@ async function fetchAll() {
   dsPairs.forEach(p => merged.set(p.pairAddress, p));
   gtPairs.forEach(p => merged.set(p.pairAddress, p));   // GT overwrites
 
-  return [...merged.values()];
+  // Filtro final — garante que APENAS pools Meteora passam, independente da fonte
+  return [...merged.values()].filter(isMeteora);
 }
 
 /* ═══════════════════════════════════════════════════════════
