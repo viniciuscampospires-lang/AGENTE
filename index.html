@@ -114,6 +114,19 @@ body {
   border: 1px solid rgba(0,200,240,.25);
 }
 
+.age-btn {
+  padding: 4px 9px; border-radius: 3px; border: none;
+  background: transparent; color: var(--text2);
+  font-size: 11px; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace; cursor: pointer;
+  transition: all .12s; white-space: nowrap;
+}
+.age-btn:hover { color: var(--text) }
+.age-btn.active {
+  background: rgba(255,196,0,.1); color: var(--yellow);
+  border: 1px solid rgba(255,196,0,.3);
+}
+
 /* sound button */
 .sound-btn {
   display: flex; align-items: center; gap: 5px;
@@ -347,6 +360,13 @@ td.num {
       <button class="filter-btn" data-filter="dlmm2">DLMM v2</button>
     </div>
 
+    <div class="filter-group" id="ageGroup">
+      <button class="age-btn" data-age="3600000">1h</button>
+      <button class="age-btn active" data-age="86400000">24h</button>
+      <button class="age-btn" data-age="604800000">7d</button>
+      <button class="age-btn" data-age="0">Tudo</button>
+    </div>
+
     <button class="sound-btn" id="soundBtn" title="Ativar / desativar alertas sonoros">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
         <path id="speakerPath" d="M2 5.5h3L8 3v10l-3-2.5H2V5.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
@@ -497,6 +517,7 @@ let allPairs   = [];        // normalized pair objects
 let seenAddrs  = null;      // Set<string> — null = first load
 let newCount   = 0;         // total new pairs detected this session
 let filter     = 'all';
+let ageFilter  = 86400000;  // ms — padrão 24h
 let sortKey    = 'age';
 let sortDir    = -1;
 let countdown  = 30;
@@ -545,6 +566,13 @@ function fmtPct(v) {
 
 function truncAddr(a) {
   if (!a) return ''; return a.slice(0,4) + '…' + a.slice(-4);
+}
+
+// Filtro estrito: apenas pools genuinamente Meteora DLMM
+const METEORA_DEXIDS = new Set(['meteora_dlmm','meteora_dlmm_v2','meteora']);
+function isMeteora(pair) {
+  const d = (pair.dexId||'').toLowerCase();
+  return METEORA_DEXIDS.has(d) || d === 'meteora_dlmm' || d === 'meteora_dlmm_v2';
 }
 
 function dlmmVer(pair) {
@@ -688,7 +716,7 @@ async function fetchDexScreener() {
       try {
         const d2 = await safeFetch(`https://api.dexscreener.com/latest/dex/tokens/${addrs.join(',')}`);
         (d2.pairs||[])
-          .filter(p => p.dexId?.toLowerCase().includes('meteora') && p.chainId==='solana')
+          .filter(p => METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) && p.chainId==='solana')
           .forEach(p => results.set(p.pairAddress, normDS(p)));
       } catch (_) {}
     }
@@ -698,7 +726,7 @@ async function fetchDexScreener() {
   try {
     const d3 = await safeFetch('https://api.dexscreener.com/latest/dex/search?q=meteora');
     (d3.pairs||[])
-      .filter(p => p.dexId?.toLowerCase().includes('meteora') && p.chainId==='solana')
+      .filter(p => METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) && p.chainId==='solana')
       .forEach(p => { if (!results.has(p.pairAddress)) results.set(p.pairAddress, normDS(p)) });
   } catch (_) {}
 
@@ -750,9 +778,13 @@ function sortPairs(pairs) {
 }
 
 function visible() {
+  const now = Date.now();
   let p = allPairs;
+  // Filtro de tipo DLMM
   if (filter === 'dlmm')  p = p.filter(x => dlmmVer(x) === 'dlmm');
   if (filter === 'dlmm2') p = p.filter(x => dlmmVer(x) === 'dlmm2');
+  // Filtro de idade (padrão 24h — mostra apenas lançamentos recentes)
+  if (ageFilter > 0) p = p.filter(x => x.pairCreatedAt && (now - x.pairCreatedAt) <= ageFilter);
   return sortPairs(p);
 }
 
@@ -980,6 +1012,15 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     filter = btn.dataset.filter;
+    renderTable(null);
+  });
+});
+
+document.querySelectorAll('.age-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.age-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ageFilter = parseInt(btn.dataset.age, 10);
     renderTable(null);
   });
 });
