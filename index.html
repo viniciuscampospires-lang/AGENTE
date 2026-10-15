@@ -589,11 +589,12 @@ function dlmmVer(pair) {
    ═══════════════════════════════════════════════════════════ */
 
 // GeckoTerminal pool → internal pair object
-function normGT(pool, inclMap) {
+// dexFallback: nome do DEX consultado, usado quando a API não retorna o campo
+function normGT(pool, inclMap, dexFallback) {
   const a = pool.attributes || {};
   const baseId  = pool.relationships?.base_token?.data?.id  || '';
   const quoteId = pool.relationships?.quote_token?.data?.id || '';
-  const dexId   = pool.relationships?.dex?.data?.id         || '';
+  const dexId   = pool.relationships?.dex?.data?.id         || dexFallback || 'meteora_dlmm';
 
   const bt = inclMap[baseId]?.attributes  || {};
   const qt = inclMap[quoteId]?.attributes || {};
@@ -676,23 +677,23 @@ async function safeFetch(url) {
 }
 
 // Processa um endpoint GeckoTerminal e adiciona ao Map
-// knownDex: dex slug da URL — usado como fallback se a API não retornar o dexId
-async function gtEndpoint(url, results, knownDex) {
+// dexFallback: nome do DEX sendo consultado (usado se a API não retornar o campo)
+async function gtEndpoint(url, results, dexFallback) {
   try {
     const d = await safeFetch(url);
     const inclMap = {};
     (d.included || []).forEach(i => { inclMap[i.id] = i });
     (d.data || []).forEach(pool => {
       if (pool.attributes?.address) {
-        const p = normGT(pool, inclMap, knownDex);
-        if (isMeteora(p) && !results.has(p.pairAddress)) results.set(p.pairAddress, p);
+        const p = normGT(pool, inclMap, dexFallback);
+        if (!results.has(p.pairAddress)) results.set(p.pairAddress, p);
       }
     });
   } catch (_) {}
 }
 
-// GeckoTerminal: APENAS endpoint dexes/{dex}/pools — garante filtro por DEX
-// new_pools ignorava o parâmetro dex= e trazia pools de qualquer DEX da Solana
+// GeckoTerminal: usa apenas endpoints de DEX específico (garantem pools Meteora)
+// Sem new_pools — aquele endpoint ignora o parâmetro dex= na prática
 async function fetchGeckoTerminal() {
   const DEXES = ['meteora_dlmm', 'meteora_dlmm_v2'];
   const results = new Map();
@@ -700,7 +701,8 @@ async function fetchGeckoTerminal() {
   const tasks = DEXES.map(dex =>
     gtEndpoint(
       `https://api.geckoterminal.com/api/v2/networks/solana/dexes/${dex}/pools?sort=pool_created_at_desc&include=base_token,quote_token,dex&page=1`,
-      results
+      results,
+      dex   // fallback para quando a API não retorna o campo dex
     )
   );
 
@@ -708,24 +710,21 @@ async function fetchGeckoTerminal() {
   return [...results.values()];
 }
 
-// DexScreener: busca direta por DEX Meteora — sem token-profiles que trazia qualquer DEX
+// DexScreener: busca "meteora" (funciona) com filtro estrito por dexId
 async function fetchDexScreener() {
   const results = new Map();
 
-  // Busca direta pelos pares Meteora DLMM
-  const queries = ['meteora_dlmm', 'meteora dlmm'];
-  for (const q of queries) {
-    try {
-      const d = await safeFetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(q)}`);
-      (d.pairs||[])
-        .filter(p =>
-          METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) &&
-          p.chainId === 'solana' &&
-          p.pairAddress
-        )
-        .forEach(p => { if (!results.has(p.pairAddress)) results.set(p.pairAddress, normDS(p)) });
-    } catch (_) {}
-  }
+  // Busca direta por "meteora" — retorna resultados reais, filtramos pelo dexId
+  try {
+    const d = await safeFetch('https://api.dexscreener.com/latest/dex/search?q=meteora');
+    (d.pairs||[])
+      .filter(p =>
+        METEORA_DEXIDS.has((p.dexId||'').toLowerCase()) &&
+        p.chainId === 'solana' &&
+        p.pairAddress
+      )
+      .forEach(p => results.set(p.pairAddress, normDS(p)));
+  } catch (_) {}
 
   return [...results.values()];
 }
@@ -748,7 +747,7 @@ async function fetchAll() {
   dsPairs.forEach(p => merged.set(p.pairAddress, p));
   gtPairs.forEach(p => merged.set(p.pairAddress, p));   // GT overwrites
 
-  // Filtro final — garante que APENAS pools Meteora passam, independente da fonte
+  // Filtro final — garante APENAS Meteora independente da fonte
   return [...merged.values()].filter(isMeteora);
 }
 
@@ -885,7 +884,7 @@ function renderTable(newAddrs) {
           <a href="${pair.urlMeteora}"  target="_blank" class="ext-link">MT</a>
           <a href="${pair.urlGT}"       target="_blank" class="ext-link">GT</a>
           <a href="${beUrl}"            target="_blank" class="ext-link">BE</a>
-          <button class="ext-link copy-btn" data-addr="${base.address}" data-pool="${pair.pairAddress}" title="Clique: copiar token | Duplo clique: copiar pool">⧉</button>
+          <button class="ext-link copy-btn" data-addr="${base.address}" title="Copiar contrato">⧉</button>
         </div>
       </td>
     </tr>`;
@@ -1029,51 +1028,27 @@ document.querySelectorAll('.age-btn').forEach(btn => {
 
 /* ═══════════════════════════════════════════════════════════
    COPIAR CONTRATO
-   Clique simples  → endereço do token (base.address)
-   Clique duplo    → endereço da pool  (pairAddress)
    ═══════════════════════════════════════════════════════════ */
-function copyToClipboard(btn, text, label) {
-  const prev = btn.textContent;
-  const done = () => {
-    btn.textContent = label || '✓';
-    setTimeout(() => { btn.textContent = prev }, 1400);
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(btn, text, done));
-  } else {
-    fallbackCopy(btn, text, done);
-  }
-}
-
-function fallbackCopy(btn, text, done) {
-  try {
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
-    document.body.appendChild(el);
-    el.focus(); el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-    done();
-  } catch(_) {}
-}
-
 document.getElementById('tbody').addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
   e.stopPropagation();
   const addr = btn.dataset.addr;
   if (!addr) return;
-  copyToClipboard(btn, addr, '✓T');
-});
-
-document.getElementById('tbody').addEventListener('dblclick', e => {
-  const btn = e.target.closest('.copy-btn');
-  if (!btn) return;
-  e.stopPropagation();
-  const pool = btn.dataset.pool;
-  if (!pool) return;
-  copyToClipboard(btn, pool, '✓P');
+  const prev = btn.textContent;
+  navigator.clipboard.writeText(addr).then(() => {
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev }, 1200);
+  }).catch(() => {
+    // fallback: selecionar texto
+    const el = document.createElement('textarea');
+    el.value = addr; el.style.position = 'fixed'; el.style.opacity = '0';
+    document.body.appendChild(el); el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = prev }, 1200);
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════
